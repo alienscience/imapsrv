@@ -1,5 +1,5 @@
 
-package imap
+package imapsrv
 
 import (
 	"fmt"
@@ -26,7 +26,7 @@ type Mailstore interface {
 	TotalMessages(mbox int64) (int64, error)
 	// Get the total number of unread messages in an IMAP mailbox
 	RecentMessages(mbox int64) (int64, error)
-	// Get the total number of unread messages in an IMAP mailbox
+	// Get the next available uid in an IMAP mailbox
 	NextUid(mbox int64) (int64, error)
 }
 

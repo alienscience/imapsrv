@@ -1,4 +1,5 @@
-package imap
+
+package imapsrv
 
 import (
 	"bufio"
