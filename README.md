@@ -8,9 +8,7 @@ This is an IMAP server written in Go. It is a work in progress.
 In the demo subdirectory is an example IMAP server that starts up on port 1193. To run this server:
 
 ```
-$ cd demo
-$ go build
-$ ./demo
+$ go run ./demo/main.go
 ```
 
 You can connect to this server using telnet or netcat. For example:
@@ -37,7 +35,11 @@ $ nc -C localhost 1193
 
 # Developing
 
-The server is not fully operational on its own. It defines an interface in session.go which describes the service it needs from a Mailstore. The Mailstore can be a database or filesystem or combination of both. The IMAP server does not care and it is up to the user to supply this service. 
+The server is not fully operational on its own. It requires a mailstore and an authentication mechanism. 
+
+It defines an interface in mailstore.go which describes the service it needs from a Mailstore. You can use multiple mailstores at the same time: database, filesystem, maildir, etc...
+
+There are plans to add basic support for maildir and a basic database storage.
 
 To add a new IMAP command the usual steps are:
 

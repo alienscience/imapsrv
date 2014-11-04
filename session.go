@@ -1,4 +1,3 @@
-
 package imapsrv
 
 import (
@@ -14,21 +13,6 @@ const (
 	authenticated
 	selected
 )
-
-// A service that is needed to read mail messages
-type Mailstore interface {
-	// Get IMAP mailbox information
-	// Returns nil if the mailbox does not exist
-	GetMailbox(name string) (*Mailbox, error)
-	// Get the sequence number of the first unseen message
-	FirstUnseen(mbox int64) (int64, error)
-	// Get the total number of messages in an IMAP mailbox
-	TotalMessages(mbox int64) (int64, error)
-	// Get the total number of unread messages in an IMAP mailbox
-	RecentMessages(mbox int64) (int64, error)
-	// Get the next available uid in an IMAP mailbox
-	NextUid(mbox int64) (int64, error)
-}
 
 // An IMAP mailbox
 type Mailbox struct {
@@ -66,50 +50,51 @@ func (s *session) log(info ...interface{}) {
 
 // Select a mailbox - returns true if the mailbox exists
 func (s *session) selectMailbox(name string) (bool, error) {
-	mailstore := s.config.Store
+	for _, mailstore := range s.config.Mailstores {
+		// Lookup the mailbox
+		mbox, err := mailstore.GetMailbox(name)
 
-	// Lookup the mailbox
-	mbox, err := mailstore.GetMailbox(name)
+		if err != nil {
+			return false, err
+		}
 
-	if err != nil {
-		return false, err
+		if mbox == nil {
+			return false, nil
+		}
+
+		// Make note of the mailbox
+		s.mailbox = mbox
+		break
 	}
-
-	if mbox == nil {
-		return false, nil
-	}
-
-	// Make note of the mailbox
-	s.mailbox = mbox
 	return true, nil
 }
 
 // Add mailbox information to the given response
 func (s *session) addMailboxInfo(resp *response) error {
-	mailstore := s.config.Store
+	for _, mailstore := range s.config.Mailstores {
+		// Get the mailbox information from the mailstore
+		firstUnseen, err := mailstore.FirstUnseen(s.mailbox.Id)
+		if err != nil {
+			return err
+		}
+		totalMessages, err := mailstore.TotalMessages(s.mailbox.Id)
+		if err != nil {
+			return err
+		}
+		recentMessages, err := mailstore.RecentMessages(s.mailbox.Id)
+		if err != nil {
+			return err
+		}
+		nextUid, err := mailstore.NextUid(s.mailbox.Id)
+		if err != nil {
+			return err
+		}
 
-	// Get the mailbox information from the mailstore
-	firstUnseen, err := mailstore.FirstUnseen(s.mailbox.Id)
-	if err != nil {
-		return err
+		resp.extra(fmt.Sprint(totalMessages, " EXISTS"))
+		resp.extra(fmt.Sprint(recentMessages, " RECENT"))
+		resp.extra(fmt.Sprintf("OK [UNSEEN %d] Message %d is first unseen", firstUnseen, firstUnseen))
+		resp.extra(fmt.Sprintf("OK [UIDVALIDITY %d] UIDs valid", s.mailbox.Id))
+		resp.extra(fmt.Sprintf("OK [UIDNEXT %d] Predicted next UID", nextUid))
 	}
-	totalMessages, err := mailstore.TotalMessages(s.mailbox.Id)
-	if err != nil {
-		return err
-	}
-	recentMessages, err := mailstore.RecentMessages(s.mailbox.Id)
-	if err != nil {
-		return err
-	}
-	nextUid, err := mailstore.NextUid(s.mailbox.Id)
-	if err != nil {
-		return err
-	}
-
-	resp.extra(fmt.Sprint(totalMessages, " EXISTS"))
-	resp.extra(fmt.Sprint(recentMessages, " RECENT"))
-	resp.extra(fmt.Sprintf("OK [UNSEEN %d] Message %d is first unseen", firstUnseen, firstUnseen))
-	resp.extra(fmt.Sprintf("OK [UIDVALIDITY %d] UIDs valid", s.mailbox.Id))
-	resp.extra(fmt.Sprintf("OK [UIDNEXT %d] Predicted next UID", nextUid))
 	return nil
 }
