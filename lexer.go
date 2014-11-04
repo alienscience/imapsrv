@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"fmt"
 	"strconv"
+	"bytes"
 )
 
 type lexer struct {
@@ -42,8 +43,25 @@ const (
 	nine        = 0x39
 	leftCurly   = 0x7b
 	rightCurly  = 0x7d
+	leftParenthesis  = 0x28
+	rightParenthesis  = 0x29
+	rightBracket = 0x5d
+	percent = 0x25
+	asterisk =0x2a
 	backslash   = 0x5c
 )
+
+// char not present in the astring charset
+var astringExceptionsChar = []byte {
+	space,
+	leftParenthesis,
+	rightParenthesis,
+	rightBracket,
+	percent,
+	asterisk,
+	backslash,
+	leftCurly,
+}
 
 // Create an IMAP lexer
 func createLexer(in *bufio.Reader) *lexer {
@@ -147,7 +165,7 @@ func (l *lexer) astring() *token {
 
 	buffer := make([]byte, 0, 16)
 
-	for l.current > space && l.current < 0x7f {
+	for l.current > space && -1 == bytes.IndexByte(astringExceptionsChar, l.current) && l.current < 0x7f {
 		buffer = append(buffer, l.current)
 		l.consume()
 	}
@@ -157,7 +175,7 @@ func (l *lexer) astring() *token {
 
 // Skip whitespace
 func (l *lexer) skipSpace() {
-	for l.current == space || l.current == lf {
+	if l.current == space || l.current == lf {
 		l.consume()
 	}
 }
