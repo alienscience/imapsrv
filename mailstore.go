@@ -1,23 +1,18 @@
-package main
+package imapsrv
 
-import (
-	imap "github.com/alienscience/imapsrv"
-)
-
-func main() {
-	// The simplest possible server - zero config
-	// It will find a free tcp port, create some temporary directories.. - just give me a server!
-	//s := imap.NewServer()
-	//s.Start()
-
-	// More advanced config
-	m := &imap.DummyMailstore{}
-
-	s := imap.NewServer(
-		imap.Listen("127.0.0.1:1193"),
-		imap.Store(m),
-	)
-	s.Start()
+// A service that is needed to read mail messages
+type Mailstore interface {
+	// Get IMAP mailbox information
+	// Returns nil if the mailbox does not exist
+	GetMailbox(name string) (*Mailbox, error)
+	// Get the sequence number of the first unseen message
+	FirstUnseen(mbox int64) (int64, error)
+	// Get the total number of messages in an IMAP mailbox
+	TotalMessages(mbox int64) (int64, error)
+	// Get the total number of unread messages in an IMAP mailbox
+	RecentMessages(mbox int64) (int64, error)
+	// Get the next available uid in an IMAP mailbox
+	NextUid(mbox int64) (int64, error)
 }
 
 // A dummy mailstore used for demonstrating the IMAP server
@@ -25,8 +20,8 @@ type DummyMailstore struct {
 }
 
 // Get mailbox information
-func (m *DummyMailstore) GetMailbox(name string) (*imap.Mailbox, error) {
-	return &imap.Mailbox{
+func (m *DummyMailstore) GetMailbox(name string) (*Mailbox, error) {
+	return &Mailbox{
 		Name: "inbox",
 		Id:   1,
 	}, nil

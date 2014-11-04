@@ -1,4 +1,3 @@
-
 package imapsrv
 
 import (
