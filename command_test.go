@@ -58,7 +58,18 @@ func TestCapabilityCommand( t *testing.T){
 	resp := cap.execute(session)
 	if (resp.tag != "A00001") || (resp.message != "CAPABILITY completed") || (resp.untagged[0] != "CAPABILITY IMAP4rev1"){
 		t.Error("Capability Failed - unexpected response.")
+		fmt.Println(resp)
 	}
-	fmt.Println(resp)
-	//t.Error("Load() did not error, should have fileNotFound")
+}
+
+
+
+func TestLogoutCommand( t *testing.T){
+	_, session := setupTest()
+	log := &logout{tag: "A00004"}
+	resp := log.execute(session)
+	if (resp.tag != "A00004") || (resp.message != "LOGOUT completed") || (resp.untagged[0] != "BYE IMAP4rev1 Server logging out"){
+		t.Error("Logout Failed - unexpected response.")
+		fmt.Println(resp)
+	}
 }
