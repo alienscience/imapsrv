@@ -11,7 +11,7 @@ import (
 type Config struct {
 	MaxClients uint
 	Listeners  []Listener
-	Mailstores []Mailstore
+	Mailstore  Mailstore
 }
 
 // An IMAP Server
@@ -61,7 +61,7 @@ func DefaultConfig() *Config {
 // Add a mailstore to the config
 func Store(m Mailstore) func(*Server) error {
 	return func(s *Server) error {
-		s.config.Mailstores = append(s.config.Mailstores, m)
+		s.config.Mailstore = m
 		return nil
 	}
 }
