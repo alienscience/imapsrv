@@ -37,9 +37,8 @@ $ nc -C localhost 1193
 
 The server is not fully operational on its own. It requires a mailstore and an authentication mechanism. 
 
-It defines an interface in mailstore.go which describes the service it needs from a Mailstore. You can use multiple mailstores at the same time: database, filesystem, maildir, etc...
-
-There are plans to add basic support for maildir and a basic database storage.
+It defines an interface in mailstore.go which describes the service it needs from a Mailstore. For example a Mailstore could serve its data from: database, filesystem, maildir, etc...
+At the moment only one mailstore can be used at the same time.
 
 To add a new IMAP command the usual steps are:
 

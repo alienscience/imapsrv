@@ -50,51 +50,48 @@ func (s *session) log(info ...interface{}) {
 
 // Select a mailbox - returns true if the mailbox exists
 func (s *session) selectMailbox(name string) (bool, error) {
-	for _, mailstore := range s.config.Mailstores {
-		// Lookup the mailbox
-		mbox, err := mailstore.GetMailbox(name)
+	// Lookup the mailbox
+	mbox, err := s.config.Mailstore.GetMailbox(name)
 
-		if err != nil {
-			return false, err
-		}
-
-		if mbox == nil {
-			return false, nil
-		}
-
-		// Make note of the mailbox
-		s.mailbox = mbox
-		break
+	if err != nil {
+		return false, err
 	}
+
+	if mbox == nil {
+		return false, nil
+	}
+
+	// Make note of the mailbox
+	s.mailbox = mbox
 	return true, nil
 }
 
 // Add mailbox information to the given response
 func (s *session) addMailboxInfo(resp *response) error {
-	for _, mailstore := range s.config.Mailstores {
-		// Get the mailbox information from the mailstore
-		firstUnseen, err := mailstore.FirstUnseen(s.mailbox.Id)
-		if err != nil {
-			return err
-		}
-		totalMessages, err := mailstore.TotalMessages(s.mailbox.Id)
-		if err != nil {
-			return err
-		}
-		recentMessages, err := mailstore.RecentMessages(s.mailbox.Id)
-		if err != nil {
-			return err
-		}
-		nextUid, err := mailstore.NextUid(s.mailbox.Id)
-		if err != nil {
-			return err
-		}
+	mailstore := s.config.Mailstore
 
-		resp.extra(fmt.Sprint(totalMessages, " EXISTS"))
-		resp.extra(fmt.Sprint(recentMessages, " RECENT"))
-		resp.extra(fmt.Sprintf("OK [UNSEEN %d] Message %d is first unseen", firstUnseen, firstUnseen))
-		resp.extra(fmt.Sprintf("OK [UIDVALIDITY %d] UIDs valid", s.mailbox.Id))
-		resp.extra(fmt.Sprintf("OK [UIDNEXT %d] Predicted next UID", nextUid))
+	// Get the mailbox information from the mailstore
+	firstUnseen, err := mailstore.FirstUnseen(s.mailbox.Id)
+	if err != nil {
+		return err
 	}
+	totalMessages, err := mailstore.TotalMessages(s.mailbox.Id)
+	if err != nil {
+		return err
+	}
+	recentMessages, err := mailstore.RecentMessages(s.mailbox.Id)
+	if err != nil {
+		return err
+	}
+	nextUid, err := mailstore.NextUid(s.mailbox.Id)
+	if err != nil {
+		return err
+	}
+
+	resp.extra(fmt.Sprint(totalMessages, " EXISTS"))
+	resp.extra(fmt.Sprint(recentMessages, " RECENT"))
+	resp.extra(fmt.Sprintf("OK [UNSEEN %d] Message %d is first unseen", firstUnseen, firstUnseen))
+	resp.extra(fmt.Sprintf("OK [UIDVALIDITY %d] UIDs valid", s.mailbox.Id))
+	resp.extra(fmt.Sprintf("OK [UIDNEXT %d] Predicted next UID", nextUid))
 	return nil
 }
