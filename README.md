@@ -16,21 +16,21 @@ You can connect to this server using telnet or netcat. For example:
 ```
 $ nc -C localhost 1193
 * OK IMAP4rev1 Service Ready
-* LOGIN test anypassword
-* OK LOGIN completed
-* CAPABILITY
+10 LOGIN test anypassword
+10 OK LOGIN completed
+20 CAPABILITY
 * CAPABILITY IMAP4rev1
-* OK CAPABILITY completed
-* SELECT inbox
+20 OK CAPABILITY completed
+30 SELECT inbox
 * 8 EXISTS
 * 4 RECENT
 * OK [UNSEEN 4] Message 4 is first unseen
 * OK [UIDVALIDITY 1] UIDs valid
 * OK [UIDNEXT 9] Predicted next UID
-* OK SELECT completed
-* LOGOUT
+30 OK SELECT completed
+40 LOGOUT
 * BYE IMAP4rev1 Server logging out
-* OK LOGOUT completed
+40 OK LOGOUT completed
 ```
 
 # Developing

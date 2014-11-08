@@ -170,6 +170,11 @@ func (l *lexer) astring() *token {
 		l.consume()
 	}
 
+	// Check that characters were consumed
+	if len(buffer) == 0 {
+		panic(parseError("Expected ASTRING"))
+	}
+
 	return &token{string(buffer), stringTokenType}
 }
 
