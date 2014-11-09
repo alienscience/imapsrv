@@ -14,12 +14,6 @@ const (
 	selected
 )
 
-// An IMAP mailbox
-type Mailbox struct {
-	Name string // The name of the mailbox
-	Id   int64  // The id of the mailbox
-}
-
 // An IMAP session
 type session struct {
 	// The client id
@@ -49,9 +43,10 @@ func (s *session) log(info ...interface{}) {
 }
 
 // Select a mailbox - returns true if the mailbox exists
-func (s *session) selectMailbox(name string) (bool, error) {
+func (s *session) selectMailbox(path []string) (bool, error) {
 	// Lookup the mailbox
-	mbox, err := s.config.Mailstore.GetMailbox(name)
+	mailstore := s.config.Mailstore
+	mbox, err := mailstore.GetMailbox(path)
 
 	if err != nil {
 		return false, err
@@ -64,6 +59,36 @@ func (s *session) selectMailbox(name string) (bool, error) {
 	// Make note of the mailbox
 	s.mailbox = mbox
 	return true, nil
+}
+
+// List mailboxes matching the given mailbox pattern
+func (s *session) list(reference []string, pattern []string) ([]*Mailbox, error) {
+
+	ret := make([]*Mailbox, 0, 4)
+	path := copySlice(reference)
+
+	// Build a path that does not have wildcards
+	wildcard := -1
+	for i, dir := range pattern {
+		if dir == "%" || dir == "*" {
+			wildcard = i
+			break
+		}
+		path = append(path, dir)
+	}
+
+	// Just return a single mailbox if there are no wildcards
+	if wildcard == -1 {
+		mbox, err := s.config.Mailstore.GetMailbox(path)
+		if err != nil {
+			return ret, err
+		}
+		ret = append(ret, mbox)
+		return ret, nil
+	}
+
+	// Recursively get a listing
+	return s.depthFirstMailboxes(ret, path, pattern[wildcard:len(pattern)])
 }
 
 // Add mailbox information to the given response
@@ -94,4 +119,69 @@ func (s *session) addMailboxInfo(resp *response) error {
 	resp.extra(fmt.Sprintf("OK [UIDVALIDITY %d] UIDs valid", s.mailbox.Id))
 	resp.extra(fmt.Sprintf("OK [UIDNEXT %d] Predicted next UID", nextUid))
 	return nil
+}
+
+// Copies a slice
+func copySlice(s []string) []string {
+	ret := make([]string, len(s), (len(s)+1)*2)
+	copy(ret, s)
+	return ret
+}
+
+// Get a recursive mailbox listing
+// At the moment this doesn't support wildcards such as 'leader%' (are they used in real life?)
+func (s *session) depthFirstMailboxes(
+	results []*Mailbox, path []string, pattern []string) ([]*Mailbox, error) {
+
+	mailstore := s.config.Mailstore
+
+	// Stop recursing if the pattern is empty or if the path is too long
+	if len(pattern) == 0 || len(path) > 20 {
+		return results, nil
+	}
+
+	// Consider the next part of the pattern
+	ret := results
+	var err error
+	pat := pattern[0]
+
+	switch pat {
+	case "%":
+		// Get all the mailboxes at the current path
+		all, err := mailstore.GetMailboxes(path)
+		if err == nil {
+			for _, mbox := range all {
+				// Consider the next pattern
+				ret = append(ret, mbox)
+				ret, err = s.depthFirstMailboxes(ret, mbox.Path, pattern[1:])
+				if err != nil {
+					break
+				}
+			}
+		}
+
+	case "*":
+		// Get all the mailboxes at the current path
+		all, err := mailstore.GetMailboxes(path)
+		if err == nil {
+			for _, mbox := range all {
+				// Keep using this pattern
+				ret = append(ret, mbox)
+				ret, err = s.depthFirstMailboxes(ret, mbox.Path, pattern)
+				if err != nil {
+					break
+				}
+			}
+		}
+
+	default:
+		// Not a wildcard pattern
+		mbox, err := mailstore.GetMailbox(path)
+		if err == nil {
+			ret = append(results, mbox)
+			ret, err = s.depthFirstMailboxes(ret, mbox.Path, pattern)
+		}
+	}
+
+	return ret, err
 }

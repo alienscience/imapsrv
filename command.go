@@ -1,8 +1,8 @@
-
 package imapsrv
 
 import (
 	"fmt"
+	"strings"
 )
 
 // An IMAP command
@@ -11,6 +11,10 @@ type command interface {
 	execute(s *session) *response
 }
 
+// Path delimiter
+const (
+	pathDelimiter = '/'
+)
 
 //------------------------------------------------------------------------------
 
@@ -32,8 +36,8 @@ type capability struct {
 
 // Execute a capability
 func (c *capability) execute(s *session) *response {
-	// The IMAP server is assumed to be running over SSL and so 
-	// STARTTLS is not supported and LOGIN is not disabled 
+	// The IMAP server is assumed to be running over SSL and so
+	// STARTTLS is not supported and LOGIN is not disabled
 	return ok(c.tag, "CAPABILITY completed").
 		extra("CAPABILITY IMAP4rev1")
 }
@@ -42,8 +46,8 @@ func (c *capability) execute(s *session) *response {
 
 // A LOGIN command
 type login struct {
-	tag string
-	userId string
+	tag      string
+	userId   string
 	password string
 }
 
@@ -87,7 +91,7 @@ func (c *logout) execute(sess *session) *response {
 
 // A SELECT command
 type selectMailbox struct {
-	tag string
+	tag     string
 	mailbox string
 }
 
@@ -96,17 +100,16 @@ func (c *selectMailbox) execute(sess *session) *response {
 
 	// Is the user authenticated?
 	if sess.st != authenticated {
-		message := "SELECT not authenticated"
-		sess.log(message)
-		return bad(c.tag, message)
+		return mustAuthenticate(sess, c.tag, "SELECT")
 	}
 
 	// Select the mailbox
-	exists, err := sess.selectMailbox(c.mailbox)
+	mbox := pathToSlice(c.mailbox)
+	exists, err := sess.selectMailbox(mbox)
 
-	if err != nil  {
+	if err != nil {
 		return internalError(sess, c.tag, "SELECT", err)
-	} 
+	}
 
 	if !exists {
 		return no(c.tag, "SELECT No such mailbox")
@@ -124,6 +127,58 @@ func (c *selectMailbox) execute(sess *session) *response {
 	return res
 }
 
+//------------------------------------------------------------------------------
+
+// A LIST command
+type list struct {
+	tag         string
+	reference   string // Context of mailbox name
+	mboxPattern string // The mailbox name pattern
+}
+
+// List command
+func (c *list) execute(sess *session) *response {
+
+	// Is the user authenticated?
+	if sess.st != authenticated {
+		return mustAuthenticate(sess, c.tag, "LIST")
+	}
+
+	// Is the mailbox pattern empty? This indicates that we should return
+	// the delimiter and the root name of the reference
+	if c.mboxPattern == "" {
+		res := ok(c.tag, "LIST completed")
+		res.extra(fmt.Sprintf(`LIST () "%s" %s`, pathDelimiter, c.reference))
+		return res
+	}
+
+	// Convert the reference and mbox pattern into slices
+	ref := pathToSlice(c.reference)
+	mbox := pathToSlice(c.mboxPattern)
+	
+	// Get the list of mailboxes
+	mboxes, err := sess.list(ref, mbox)
+
+	if err != nil {
+		return internalError(sess, c.tag, "LIST", err)
+	}
+
+	// Check for an empty response
+	if len(mboxes) == 0 {
+		return no(c.tag, "LIST no results")
+	}
+
+	// Respond with the mailboxes
+	res := ok(c.tag, "LIST completed")
+	for _, mbox := range mboxes {
+		res.extra(fmt.Sprintf(`LIST (%s) "%s" /%s`,
+			joinMailboxFlags(mbox), 
+			string(pathDelimiter), 
+			strings.Join(mbox.Path, string(pathDelimiter))))
+	}
+
+	return res
+}
 
 //------------------------------------------------------------------------------
 
@@ -143,8 +198,63 @@ func (c *unknown) execute(s *session) *response {
 //------ Helper functions ------------------------------------------------------
 
 // Log an error and return an response
-func internalError(sess *session, tag string, commandName string, err error)  *response {
+func internalError(sess *session, tag string, commandName string, err error) *response {
 	message := commandName + " " + err.Error()
 	sess.log(message)
 	return no(tag, message).shouldClose()
+}
+
+// Indicate a command is invalid because the user has not authenticated
+func mustAuthenticate(sess *session, tag string, commandName string) *response {
+	message := commandName + " not authenticated"
+	sess.log(message)
+	return bad(tag, message)
+}
+
+// Convert a path to a slice of strings
+func pathToSlice(path string) []string {
+
+	// Split the path
+	ret := strings.Split(path, string(pathDelimiter))
+
+	if len(ret) == 0 {
+		return ret
+	}
+
+	// Remove leading and trailing blanks
+	if ret[0] == "" {
+		if len(ret) > 1 {
+			ret = ret[1:len(ret)]
+		} else {
+			return []string{}
+		}
+	}
+
+	lastIndex := len(ret) - 1
+	if ret[lastIndex] == "" {
+		if len(ret) > 1 {
+			ret = ret[0:lastIndex]
+		} else {
+			return []string{}
+		}
+	}
+
+	return ret
+		
+}
+
+// Return a string of mailbox flags for the given mailbox
+func joinMailboxFlags(m *Mailbox) string {
+
+	// Convert the mailbox flags into a slice of strings
+	flags := make([]string, 0, 4)
+
+	for flag, str := range mailboxFlags {
+		if m.Flags&flag != 0 {
+			flags = append(flags, str)
+		}
+	}
+
+	// Return a joined string
+	return strings.Join(flags, ",")
 }

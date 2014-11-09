@@ -22,12 +22,42 @@ type TestMailstore struct {
 }
 
 // Get mailbox information
-func (m *TestMailstore) GetMailbox(name string) (*Mailbox, error) {
+func (m *TestMailstore) GetMailbox(path []string) (*Mailbox, error) {
 	return &Mailbox{
 		Name: "inbox",
 		Id:   1,
 	}, nil
 }
+
+// Get a list of mailboxes at the given path
+func (m *TestMailstore) GetMailboxes(path []string) ([]*Mailbox, error) {
+	if len(path) == 0 {
+		// Root
+		return []*Mailbox{
+			&Mailbox{
+				Name: "inbox",
+				Path: []string{"inbox"},
+				Id:   1,
+			},
+			&Mailbox{
+				Name: "spam",
+				Path: []string{"spam"},
+				Id:   2,
+			},
+		}, nil
+	} else if len(path) == 1 && path[0] == "inbox" {
+		return []*Mailbox{
+			&Mailbox{
+				Name: "starred",
+				Path: []string{"inbox", "stared"},
+				Id:   3,
+			},
+		}, nil
+	} else {
+		return []*Mailbox{}, nil
+	}
+}
+
 
 // Get the sequence number of the first unseen message
 func (m *TestMailstore) FirstUnseen(mbox int64) (int64, error) {

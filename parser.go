@@ -48,6 +48,8 @@ func (p *parser) next() command {
 		return p.logout(tag)
 	case "select":
 		return p.selectC(tag)
+	case "list":
+		return p.list(tag)
 	default:
 		return p.unknown(tag, rawCommand)
 	}
@@ -90,6 +92,20 @@ func (p *parser) selectC(tag string) command {
 	p.match(eolTokenType)
 
 	return &selectMailbox{tag: tag, mailbox: mailbox}
+}
+
+// Create a list command
+func (p *parser) list(tag string) command {
+	// Get the command arguments
+	reference := p.match(stringTokenType).value
+	if strings.EqualFold(reference, "inbox") {
+		reference = "INBOX"
+	}
+	mailbox := p.match(stringTokenType).value
+
+	p.match(eolTokenType)
+
+	return &list{tag: tag, reference: reference, mboxPattern: mailbox}
 }
 
 // Create a placeholder for an unknown command
