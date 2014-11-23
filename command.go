@@ -155,7 +155,7 @@ func (c *list) execute(sess *session) *response {
 	// Convert the reference and mbox pattern into slices
 	ref := pathToSlice(c.reference)
 	mbox := pathToSlice(c.mboxPattern)
-	
+
 	// Get the list of mailboxes
 	mboxes, err := sess.list(ref, mbox)
 
@@ -172,12 +172,113 @@ func (c *list) execute(sess *session) *response {
 	res := ok(c.tag, "LIST completed")
 	for _, mbox := range mboxes {
 		res.extra(fmt.Sprintf(`LIST (%s) "%s" /%s`,
-			joinMailboxFlags(mbox), 
-			string(pathDelimiter), 
+			joinMailboxFlags(mbox),
+			string(pathDelimiter),
 			strings.Join(mbox.Path, string(pathDelimiter))))
 	}
 
 	return res
+}
+
+//------------------------------------------------------------------------------
+
+// A FETCH command
+type fetch struct {
+	tag         string
+	macro       fetchCommandMacro
+	sequenceSet []sequenceRange
+	attachments []fetchAttachment
+}
+
+// Fetch attachments
+type fetchAttachment struct {
+	attachment fetchAttachmentId
+	section    *fetchSection
+	partial    *fetchPartial
+}
+
+type fetchAttachmentId int
+
+const (
+	envelopeFetchAtt = iota
+	flagsFetchAtt
+	internalDateFetchAtt
+	rfc822FetchAtt
+	bodyFetchAtt
+	uidFetchAtt
+	bodyStructureFetchAtt
+	bodyPeekFetchAtt
+)
+
+// Fetch macros
+type fetchCommandMacro int
+
+const (
+	invalidFetchMacro = iota
+	allFetchMacro
+	fullFetchMacro
+	fastFetchMacro
+)
+
+// The section of fetch attachment
+type fetchSection struct {
+	numericSpecifier string
+	part partSpecifier 
+	fields []string
+}
+
+type partSpecifier int
+
+const (
+	headerPart = iota
+	headerFieldsPart
+	headerFieldsNotPart
+	textPart
+)
+
+// A byte range
+type fetchPartial struct {
+	fromOctet uint32
+	toOctet uint32
+}
+
+// Message sequence number for fetch
+type sequenceNumber struct {
+	value      uint32
+	isWildcard bool
+}
+
+const (
+	// Value of an empty sequence number
+	emptySequenceNumber = 0
+)
+
+// Sequence range, end can be emptySequenceNumber to
+// specify a sequence number
+type sequenceRange struct {
+	start sequenceNumber
+	end   sequenceNumber
+}
+
+// Creating a fetch command requires a constructor
+func createFetchCommand(tag string) *fetch {
+	return &fetch{
+		tag:         tag,
+		macro:       invalidFetchMacro,
+		sequenceSet: make([]sequenceRange, 0, 4),
+		attachments: make([]fetchAttachment, 0, 4),
+	}
+}
+
+// Fetch command
+func (c *fetch) execute(sess *session) *response {
+
+	// Is the user authenticated?
+	if sess.st != authenticated {
+		return mustAuthenticate(sess, c.tag, "FETCH")
+	}
+
+	return bad(c.tag, "Not yet implemented")
 }
 
 //------------------------------------------------------------------------------
@@ -240,7 +341,7 @@ func pathToSlice(path string) []string {
 	}
 
 	return ret
-		
+
 }
 
 // Return a string of mailbox flags for the given mailbox

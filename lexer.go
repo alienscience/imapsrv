@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/textproto"
 	"strconv"
+	"strings"
 )
 
 type lexer struct {
@@ -15,7 +16,9 @@ type lexer struct {
 	line []byte
 	// The index to the current character
 	idx int
-	// The start of tokens, used for rewinding to the previous token
+	// The start of tokens, used for rewinding to the previous
+	// token. The lexer does not rewind tokens itself, this is left
+	// to the parser.
 	tokens []int
 }
 
@@ -27,8 +30,10 @@ const (
 	space            = 0x20
 	doubleQuote      = 0x22
 	plus             = 0x2b
+	comma            = 0x2b
 	zero             = 0x30
 	nine             = 0x39
+	colon            = 0x3a
 	leftCurly        = 0x7b
 	rightCurly       = 0x7d
 	leftParenthesis  = 0x28
@@ -102,6 +107,97 @@ func (l *lexer) listMailbox() (bool, string) {
 	l.startToken()
 
 	return l.generalString("LIST-MAILBOX", listMailboxExceptionsChar)
+}
+
+// A sequence number
+func (l *lexer) sequenceNumber() (bool, uint32) {
+
+	// Read a sequence of digits
+	buffer := make([]byte, 0, 8)
+
+	current := l.current()
+
+	for current >= zero && current <= nine {
+		buffer = append(buffer, current)
+		l.consume()
+		current = l.current()
+	}
+
+	// Check that at least one digit was read
+	if len(buffer) == 0 {
+		return false, 0
+	}
+
+	// Convert to a number
+	num, err := strconv.ParseUint(string(buffer), 10, 32)
+	if err != nil {
+		return false, 0
+	}
+
+	return true, uint32(num)
+}
+
+// A sequence range separator
+func (l *lexer) sequenceRangeSeparator() bool {
+	if l.current() == colon {
+		l.consume()
+		return true
+	}
+
+	return false
+}
+
+// A sequence set delimiter
+func (l *lexer) sequenceDelimiter() bool {
+	if l.current() == comma {
+		l.consume()
+		return true
+	}
+
+	return false
+}
+
+// A sequence wildcard
+func (l *lexer) sequenceWildcard() bool {
+	if l.current() == asterisk {
+		l.consume()
+		return true
+	}
+
+	return false
+}
+
+// A fetch macro
+func (l *lexer) fetchMacro() (bool, fetchCommandMacro) {
+	l.skipSpace()
+	l.startToken()
+
+	ok, word := l.asciiWord()
+	if !ok {
+		return false, invalidFetchMacro
+	}
+
+	// Convert the work to a fetch macro
+	switch strings.ToLower(word) {
+	case "all":
+		return ok, allFetchMacro
+	case "full":
+		return ok, fullFetchMacro
+	case "fast":
+		return ok, fastFetchMacro
+	default:
+		return false, invalidFetchMacro
+	}
+}
+
+// A left parenthesis
+func (l *lexer) leftParen() bool {
+	if l.current() == leftParenthesis {
+		l.consume()
+		return true
+	}
+
+	return false
 }
 
 //-------- IMAP token helper functions -----------------------------------------
@@ -194,7 +290,7 @@ func (l *lexer) literal() string {
 
 	for {
 		buffer = append(buffer, c)
-	
+
 		// Is this the end of the literal?
 		length -= 1
 		if length == 0 {
@@ -216,6 +312,28 @@ func (l *lexer) nonquoted(name string, exceptions []byte) (bool, string) {
 	c := l.current()
 
 	for c > space && c < 0x7f && -1 == bytes.IndexByte(exceptions, c) {
+
+		buffer = append(buffer, c)
+		c = l.consume()
+	}
+
+	// Check that characters were consumed
+	if len(buffer) == 0 {
+		return false, ""
+	}
+
+	return true, string(buffer)
+}
+
+// A word containing only ascii letters
+func (l *lexer) asciiWord() (bool, string) {
+
+	buffer := make([]byte, 0, 8)
+
+	// Get the current byte
+	c := l.current()
+
+	for (c > 0x40 && c < 0x5b) || (c > 0x60 && c < 0x7b) {
 
 		buffer = append(buffer, c)
 		c = l.consume()
