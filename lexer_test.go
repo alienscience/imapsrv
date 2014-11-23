@@ -92,7 +92,7 @@ func TestLexesAstring(t *testing.T) {
 
 	r := bufio.NewReader(strings.NewReader("a0001)\n"))
 	l := createLexer(r)
-	token := l.next()
+	token := l.next(asAString)
 
 	if token.tokType != stringTokenType {
 		t.Fail()
@@ -108,7 +108,7 @@ func TestLexesQuotedString(t *testing.T) {
 
 	r := bufio.NewReader(strings.NewReader("\"A12312\"\n"))
 	l := createLexer(r)
-	token := l.next()
+	token := l.next(asAString)
 
 	if token.tokType != stringTokenType {
 		t.Fail()
@@ -124,7 +124,7 @@ func TestLexesLiteral(t *testing.T) {
 
 	r := bufio.NewReader(strings.NewReader("{11}\nFRED FOOBAR {7}\n"))
 	l := createLexer(r)
-	token := l.next()
+	token := l.next(asAString)
 
 	if token.tokType != stringTokenType {
 		t.Fail()

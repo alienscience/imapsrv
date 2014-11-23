@@ -1,11 +1,10 @@
-
 package imapsrv
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"strconv"
-	"bytes"
 )
 
 type lexer struct {
@@ -34,25 +33,26 @@ var eolToken = &token{"", eolTokenType}
 
 // Ascii codes
 const (
-	endOfInput  = 0x00
-	cr          = 0x0d
-	lf          = 0x0a
-	space       = 0x20
-	doubleQuote = 0x22
-	zero        = 0x30
-	nine        = 0x39
-	leftCurly   = 0x7b
-	rightCurly  = 0x7d
+	endOfInput       = 0x00
+	cr               = 0x0d
+	lf               = 0x0a
+	space            = 0x20
+	doubleQuote      = 0x22
+	plus             = 0x2b
+	zero             = 0x30
+	nine             = 0x39
+	leftCurly        = 0x7b
+	rightCurly       = 0x7d
 	leftParenthesis  = 0x28
-	rightParenthesis  = 0x29
-	rightBracket = 0x5d
-	percent = 0x25
-	asterisk =0x2a
-	backslash   = 0x5c
+	rightParenthesis = 0x29
+	rightBracket     = 0x5d
+	percent          = 0x25
+	asterisk         = 0x2a
+	backslash        = 0x5c
 )
 
 // char not present in the astring charset
-var astringExceptionsChar = []byte {
+var astringExceptionsChar = []byte{
 	space,
 	leftParenthesis,
 	rightParenthesis,
@@ -63,6 +63,39 @@ var astringExceptionsChar = []byte {
 	leftCurly,
 }
 
+// char not present in the tag charset
+var tagExceptionsChar = []byte{
+	space,
+	leftParenthesis,
+	rightParenthesis,
+	rightBracket,
+	percent,
+	asterisk,
+	backslash,
+	leftCurly,
+	plus,
+}
+
+// char not present in the list-mailbox charset
+var listMailboxExceptionsChar = []byte{
+	space,
+	leftParenthesis,
+	rightParenthesis,
+	rightBracket,
+	backslash,
+	leftCurly,
+}
+
+// Flags that indicate how to lex unquoted strings
+const (
+	asAString = iota
+	asTag
+	asListMailbox
+	asAny
+)
+
+type unquotedLexerFlag uint8
+
 // Create an IMAP lexer
 func createLexer(in *bufio.Reader) *lexer {
 
@@ -71,7 +104,7 @@ func createLexer(in *bufio.Reader) *lexer {
 }
 
 // Get the next token
-func (l *lexer) next() *token {
+func (l *lexer) next(flag unquotedLexerFlag) *token {
 
 	// Skip whitespace
 	l.skipSpace()
@@ -88,7 +121,17 @@ func (l *lexer) next() *token {
 		l.consume()
 		return l.literal()
 	default:
-		return l.astring()
+		// Lex an unquoted string
+		switch flag {
+		case asAny:
+			return l.any()
+		case asTag:
+			return l.tagString()
+		case asListMailbox:
+			return l.listMailbox()
+		default:
+			return l.astring()
+		}
 	}
 }
 
@@ -160,19 +203,42 @@ func (l *lexer) literal() *token {
 	return &token{string(buffer), stringTokenType}
 }
 
-// A very loose interpretation of a non-quoted string
+// An astring
 func (l *lexer) astring() *token {
+	return l.nonquoted("ASTRING", astringExceptionsChar)
+}
+
+// A tag string
+func (l *lexer) tagString() *token {
+	return l.nonquoted("TAG", tagExceptionsChar)
+}
+
+// A list mailbox
+func (l *lexer) listMailbox() *token {
+	return l.nonquoted("LIST-MAILBOX", listMailboxExceptionsChar)
+}
+
+// Any unquoted string
+func (l *lexer) any() *token {
+	return l.nonquoted("ANY", nil)
+}
+
+// A non-quoted string
+func (l *lexer) nonquoted(name string, exceptions []byte) *token {
 
 	buffer := make([]byte, 0, 16)
 
-	for l.current > space && -1 == bytes.IndexByte(astringExceptionsChar, l.current) && l.current < 0x7f {
+	for l.current > space &&
+		-1 == bytes.IndexByte(exceptions, l.current) &&
+		l.current < 0x7f {
+
 		buffer = append(buffer, l.current)
 		l.consume()
 	}
 
 	// Check that characters were consumed
 	if len(buffer) == 0 {
-		panic(parseError("Expected ASTRING"))
+		panic(parseError("Expected " + name))
 	}
 
 	return &token{string(buffer), stringTokenType}
