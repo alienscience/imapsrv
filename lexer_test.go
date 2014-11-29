@@ -57,13 +57,13 @@ func TestAstring(t *testing.T) {
 
 	// Test cases receive a map of OUTPUT => INPUT
 	passing := map[string]string{
-		"a":    "a\r\n",     // 1*ASTRING-CHAR - single
-		"this": "this\r\n",  // 1*ASTRING-CHAR - many
-		"burb": "burb)\r\n", // 1*ASTRING-CHAR - stop at )
-		"\"\"": "\"\"\r\n",  // <quoted> with no *QUOTED-CHAR
-		"[":    "[\r\n",
-		//"{5} abcd": "{5}\r\n abcd\n", // TODO : Should pass under <string> alternative <literal>?
-		//"]":        "]\n",            // TODO : Should pass in <ASTRING-CHAR> under the <resp-specials> alternative
+		"a":     "a\r\n",     // 1*ASTRING-CHAR - single
+		"this":  "this\r\n",  // 1*ASTRING-CHAR - many
+		"burb":  "burb)\r\n", // 1*ASTRING-CHAR - stop at )
+		"":      "\"\"\r\n",  // <quoted> with no *QUOTED-CHAR
+		"[":     "[\r\n",
+		" abcd": "{5}\r\n abcd\n", // <string> alternative <literal>
+		"]":     "]\n",            // <ASTRING-CHAR> under the <resp-specials> alternative
 	}
 
 	// The failing test case map key is largely irrelevant as they should panic, just included for consistency
@@ -80,7 +80,7 @@ func TestAstring(t *testing.T) {
 
 	panicCount := 0
 
-	testAstring := func(in, out string) bool {
+	testAstring := func(in, out string) (bool, string) {
 
 		// Catch the panics and increment the panic counter for failures
 		defer func() {
@@ -97,22 +97,24 @@ func TestAstring(t *testing.T) {
 
 		r := bufio.NewReader(strings.NewReader(in))
 		l := createLexer(r)
-		l.skipSpace()
-		tk := l.astring()
+		tk := l.next(asAString)
 
-		return tk.value == out
+		return tk.value == out, tk.value
 
 	}
 
 	for o, i := range passing {
-		if testAstring(i, o) != true {
-			t.Logf("Failed on passing case: input %q, output %q", i, o)
+		ok, actual := testAstring(i, o)
+		if !ok {
+			t.Logf("Failed on passing case: input %q, expected output %q, actual output %q",
+				i, o, actual)
 			t.Fail()
 		}
 	}
 
 	for o, i := range failing {
-		if testAstring(i, o) != false {
+		ok, _ := testAstring(i, o)
+		if ok {
 			// This should not be reached as all failing test cases should trigger a panic
 			t.Logf("Failed on failing case: input %q, output %q", i, o)
 			t.Fail()
@@ -216,7 +218,7 @@ func TestLexesLiteral(t *testing.T) {
 		t.Fail()
 	}
 
-	if "\nFRED FOOBA" != token.value {
+	if "FRED FOOBAR" != token.value {
 		t.Fail()
 	}
 

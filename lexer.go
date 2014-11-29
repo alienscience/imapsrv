@@ -56,7 +56,6 @@ var astringExceptionsChar = []byte{
 	space,
 	leftParenthesis,
 	rightParenthesis,
-	rightBracket,
 	percent,
 	asterisk,
 	backslash,
@@ -68,7 +67,6 @@ var tagExceptionsChar = []byte{
 	space,
 	leftParenthesis,
 	rightParenthesis,
-	rightBracket,
 	percent,
 	asterisk,
 	backslash,
@@ -190,6 +188,9 @@ func (l *lexer) literal() *token {
 
 	// Consume the right curly and the newline that should follow
 	l.consumeEol()
+	if length > 0 {
+		l.consumeLf()
+	}
 
 	buffer := make([]byte, 0, 64)
 
@@ -244,7 +245,7 @@ func (l *lexer) nonquoted(name string, exceptions []byte) *token {
 	return &token{string(buffer), stringTokenType}
 }
 
-// Skip whitespace
+// Skip whitespace and any trailing linefeeds from before
 func (l *lexer) skipSpace() {
 	if l.current == space || l.current == lf {
 		l.consume()
@@ -252,10 +253,19 @@ func (l *lexer) skipSpace() {
 }
 
 // Consume until end of line
+// This function does not consume the actual line feed as this
+// may be EOF
 func (l *lexer) consumeEol() {
 
 	// Consume until the linefeed
 	for l.current != lf {
+		l.consume()
+	}
+}
+
+// Consume a line feed
+func (l *lexer) consumeLf() {
+	if l.current == lf {
 		l.consume()
 	}
 }
