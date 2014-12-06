@@ -10,23 +10,23 @@ func TestQstring(t *testing.T) {
 
 	r := bufio.NewReader(strings.NewReader("quoted string\"\n"))
 	l := createLexer(r)
-	l.skipSpace()
+	l.newLine()
 	tk := l.qstring()
 
-	if tk.value != "quoted string" {
+	if tk != "quoted string" {
 		t.Fail()
 	}
 
 }
 
-func TestLiteral(t *testing.T) {
+func TestEmptyLiteral(t *testing.T) {
 
-	r := bufio.NewReader(strings.NewReader("0}\n"))
+	r := bufio.NewReader(strings.NewReader("0}\n\n"))
 	l := createLexer(r)
-	l.skipSpace()
+	l.newLine()
 	tk := l.literal()
 
-	if tk.value != "" {
+	if tk != "" {
 		t.Fail()
 	}
 
@@ -78,11 +78,9 @@ func TestAstring(t *testing.T) {
 		"(": "(", // <atom-specials> not allowed in ATOM-CHAR
 	}
 
-	panicCount := 0
-
 	testAstring := func(in, out string) (bool, string) {
 
-		// Catch the panics and increment the panic counter for failures
+		// Catch any panics
 		defer func() {
 			if r := recover(); r != nil {
 				// EOFs are easily obscured as they are also a form of panic in the system
@@ -91,15 +89,15 @@ func TestAstring(t *testing.T) {
 					t.Logf("Bad panic on input: %q, output: %q", in, out)
 					panic("EOF found in TestAstring - should not be present, correct the test(s)")
 				}
-				panicCount += 1
 			}
 		}()
 
 		r := bufio.NewReader(strings.NewReader(in))
 		l := createLexer(r)
-		tk := l.next(asAString)
+		l.newLine()
+		ok, tk := l.astring()
 
-		return tk.value == out, tk.value
+		return ok && tk == out, tk
 
 	}
 
@@ -121,38 +119,19 @@ func TestAstring(t *testing.T) {
 		}
 	}
 
-	if panicCount != len(failing) {
-		t.Logf("Expected %d panics, found %d", len(failing), panicCount)
-		t.Fail()
-	}
-
 }
 
 func TestSkipSpace(t *testing.T) {
 
-	r := bufio.NewReader(strings.NewReader("abc one"))
+	r := bufio.NewReader(strings.NewReader("abc one\n"))
 	l := createLexer(r)
+	l.newLine()
 
-	// lexer instantiates with space at current
-	if l.current != byte(' ') {
-		t.Fail()
-	}
-
+	l.astring()
 	l.skipSpace()
-	// skips past the initialized space
-	if l.current != byte('a') {
-		t.Fail()
-	}
 
-}
-
-func TestConsumeEol(t *testing.T) {
-
-	r := bufio.NewReader(strings.NewReader("abc\none"))
-	l := createLexer(r)
-	l.consumeEol()
-
-	if l.current != byte('\n') {
+	// skips past the space
+	if l.current() != byte('o') {
 		t.Fail()
 	}
 
@@ -162,10 +141,10 @@ func TestConsume(t *testing.T) {
 
 	r := bufio.NewReader(strings.NewReader("abc\none"))
 	l := createLexer(r)
-	l.skipSpace()
+	l.newLine()
 	l.consume()
 
-	if l.current != byte('b') {
+	if l.current() != byte('b') {
 		t.Fail()
 	}
 
@@ -175,13 +154,14 @@ func TestLexesAstring(t *testing.T) {
 
 	r := bufio.NewReader(strings.NewReader("a0001)\n"))
 	l := createLexer(r)
-	token := l.next(asAString)
+	l.newLine()
+	ok, token := l.astring()
 
-	if token.tokType != stringTokenType {
+	if !ok {
 		t.Fail()
 	}
 
-	if token.value != "a0001" {
+	if token != "a0001" {
 		t.Fail()
 	}
 
@@ -191,13 +171,14 @@ func TestLexesQuotedString(t *testing.T) {
 
 	r := bufio.NewReader(strings.NewReader("\"A12312\"\n"))
 	l := createLexer(r)
-	token := l.next(asAString)
+	l.newLine()
+	ok, token := l.astring()
 
-	if token.tokType != stringTokenType {
+	if !ok {
 		t.Fail()
 	}
 
-	if token.value != "A12312" {
+	if token != "A12312" {
 		t.Fail()
 	}
 
@@ -207,18 +188,19 @@ func TestLexesLiteral(t *testing.T) {
 
 	r := bufio.NewReader(strings.NewReader("{11}\nFRED FOOBAR {7}\n"))
 	l := createLexer(r)
-	token := l.next(asAString)
+	l.newLine()
+	ok, token := l.astring()
 
-	if token.tokType != stringTokenType {
+	if !ok {
 		t.Fail()
 	}
 
 	// the token after {11} should be of length 11
-	if 11 != len(token.value) {
+	if 11 != len(token) {
 		t.Fail()
 	}
 
-	if "FRED FOOBAR" != token.value {
+	if "FRED FOOBAR" != token {
 		t.Fail()
 	}
 

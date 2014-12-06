@@ -1,3 +1,4 @@
+
 package imapsrv
 
 import (
@@ -25,17 +26,22 @@ func createParser(in *bufio.Reader) *parser {
 	return &parser{lexer: lexer}
 }
 
+
+//----- Commands ---------------------------------------------------------------
+
 // Parse the next command
 func (p *parser) next() command {
 
+	// All commands start on a new line
+	p.lexer.newLine()
+
 	// Expect a tag followed by a command
-	tagToken := p.match(stringTokenType, asTag)
-	commandToken := p.match(stringTokenType, asAString)
+	tag := p.expectString(p.lexer.tag)
+	rawCommand := p.expectString(p.lexer.astring)
+
 
 	// Parse the command based on its lowercase value
-	rawCommand := commandToken.value
 	lcCommand := strings.ToLower(rawCommand)
-	tag := tagToken.value
 
 	switch lcCommand {
 	case "noop":
@@ -57,13 +63,11 @@ func (p *parser) next() command {
 
 // Create a NOOP command
 func (p *parser) noop(tag string) command {
-	p.matchEOL()
 	return &noop{tag: tag}
 }
 
 // Create a capability command
 func (p *parser) capability(tag string) command {
-	p.matchEOL()
 	return &capability{tag: tag}
 }
 
@@ -71,9 +75,8 @@ func (p *parser) capability(tag string) command {
 func (p *parser) login(tag string) command {
 
 	// Get the command arguments
-	userId := p.match(stringTokenType, asAString).value
-	password := p.match(stringTokenType, asAString).value
-	p.matchEOL()
+	userId := p.expectString(p.lexer.astring)
+	password := p.expectString(p.lexer.astring)
 
 	// Create the command
 	return &login{tag: tag, userId: userId, password: password}
@@ -81,58 +84,48 @@ func (p *parser) login(tag string) command {
 
 // Create a logout command
 func (p *parser) logout(tag string) command {
-	p.matchEOL()
 	return &logout{tag: tag}
 }
 
 // Create a select command
 func (p *parser) selectC(tag string) command {
+
 	// Get the mailbox name
-	mailbox := p.match(stringTokenType, asAString).value
-	p.matchEOL()
+	mailbox := p.expectString(p.lexer.astring)
 
 	return &selectMailbox{tag: tag, mailbox: mailbox}
 }
 
 // Create a list command
 func (p *parser) list(tag string) command {
+
 	// Get the command arguments
-	reference := p.match(stringTokenType, asAString).value
+	reference := p.expectString(p.lexer.astring)
+
 	if strings.EqualFold(reference, "inbox") {
 		reference = "INBOX"
 	}
-	mailbox := p.match(stringTokenType, asListMailbox).value
-
-	p.matchEOL()
+	mailbox := p.expectString(p.lexer.listMailbox)
 
 	return &list{tag: tag, reference: reference, mboxPattern: mailbox}
 }
 
 // Create a placeholder for an unknown command
 func (p *parser) unknown(tag string, cmd string) command {
-	for tok := p.lexer.next(asAny); tok.tokType != eolTokenType; tok = p.lexer.next(asAny) {
-	}
 	return &unknown{tag: tag, cmd: cmd}
 }
 
-// Match the given token
-func (p *parser) match(expected tokenType, lexAs unquotedLexerFlag) *token {
+//----- Helper functions -------------------------------------------------------
 
-	// Get the next token from the lexer
-	tok := p.lexer.next(lexAs)
-
-	// Is this the expected token?
-	if tok.tokType != expected {
-		msg := fmt.Sprintf("Parser expected token type %v but got %v",
-			expected, tok.tokType)
+// Get a string token using the given lexer function
+// If the lexing fails then panic
+func (p *parser) expectString(lex func () (bool, string)) string {
+	ok, ret := lex()
+	if !ok {
+		msg := fmt.Sprintf("Parser unexpected %q", p.lexer.current())
 		err := parseError(msg)
 		panic(err)
 	}
 
-	return tok
-}
-
-// Match end of line
-func (p *parser) matchEOL() {
-	p.match(eolTokenType, asAny)
+	return ret
 }

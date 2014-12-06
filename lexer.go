@@ -4,32 +4,20 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"net/textproto"
 	"strconv"
 )
 
 type lexer struct {
-	reader  *bufio.Reader
-	current byte
+	// Line based reader
+	reader *textproto.Reader
+	// The current line
+	line []byte
+	// The index to the current character
+	idx int
+	// The start of tokens, used for rewinding to the previous token
+	tokens []int
 }
-
-// The lexer produces tokens
-type token struct {
-	value   string
-	tokType tokenType
-}
-
-// Token types
-type tokenType int
-
-const (
-	stringTokenType = iota
-	eolTokenType
-	invalidTokenType
-)
-
-// Literal tokens
-var invalidToken = &token{"", invalidTokenType}
-var eolToken = &token{"", eolTokenType}
 
 // Ascii codes
 const (
@@ -84,100 +72,106 @@ var listMailboxExceptionsChar = []byte{
 	leftCurly,
 }
 
-// Flags that indicate how to lex unquoted strings
-const (
-	asAString = iota
-	asTag
-	asListMailbox
-	asAny
-)
-
-type unquotedLexerFlag uint8
-
-// Create an IMAP lexer
+// Create a partially initialised IMAP lexer
+// lexer.newLine() must be the first call to this lexer
 func createLexer(in *bufio.Reader) *lexer {
-
-	// Fake the first character - use a space that will be skipped
-	return &lexer{reader: in, current: space}
+	return &lexer{reader: textproto.NewReader(in)}
 }
 
-// Get the next token
-func (l *lexer) next(flag unquotedLexerFlag) *token {
+//-------- IMAP tokens ---------------------------------------------------------
 
-	// Skip whitespace
+// An astring
+func (l *lexer) astring() (bool, string) {
 	l.skipSpace()
+	l.startToken()
+
+	return l.generalString("ASTRING", astringExceptionsChar)
+}
+
+// A tag string
+func (l *lexer) tag() (bool, string) {
+	l.skipSpace()
+	l.startToken()
+
+	return l.nonquoted("TAG", tagExceptionsChar)
+}
+
+// A list mailbox
+func (l *lexer) listMailbox() (bool, string) {
+	l.skipSpace()
+	l.startToken()
+
+	return l.generalString("LIST-MAILBOX", listMailboxExceptionsChar)
+}
+
+//-------- IMAP token helper functions -----------------------------------------
+
+// Handle a string that can be bare, a literal or quoted
+func (l *lexer) generalString(name string, exceptions []byte) (bool, string) {
 
 	// Consider the first character - this gives the type of argument
-	switch l.current {
-	case cr:
-		l.consumeEol()
-		return eolToken
+	switch l.current() {
 	case doubleQuote:
 		l.consume()
-		return l.qstring()
+		return true, l.qstring()
 	case leftCurly:
 		l.consume()
-		return l.literal()
+		return true, l.literal()
 	default:
-		// Lex an unquoted string
-		switch flag {
-		case asAny:
-			return l.any()
-		case asTag:
-			return l.tagString()
-		case asListMailbox:
-			return l.listMailbox()
-		default:
-			return l.astring()
-		}
+		return l.nonquoted(name, exceptions)
 	}
 }
 
 // Read a quoted string
-func (l *lexer) qstring() *token {
+func (l *lexer) qstring() string {
 
 	var buffer = make([]byte, 0, 16)
 
-	// Collect the characters that are within double quotes
-	for l.current != doubleQuote {
+	c := l.current()
 
-		switch l.current {
+	// Collect the characters that are within double quotes
+	for c != doubleQuote {
+
+		switch c {
 		case cr, lf:
 			err := parseError(fmt.Sprintf(
-				"Unexpected character %q in quoted string", l.current))
+				"Unexpected character %q in quoted string", c))
 			panic(err)
 		case backslash:
-			l.consume()
-			buffer = append(buffer, l.current)
+			c = l.consume()
+			buffer = append(buffer, c)
 		default:
-			buffer = append(buffer, l.current)
+			buffer = append(buffer, c)
 		}
 
-		// Get the next character
-		l.consume()
+		// Get the next byte
+		c = l.consume()
 	}
 
 	// Ignore the closing quote
 	l.consume()
 
-	return &token{string(buffer), stringTokenType}
+	return string(buffer)
 }
 
 // Parse a length tagged literal
-func (l *lexer) literal() *token {
+// TODO: send a continuation request after the first line is read
+func (l *lexer) literal() string {
 
 	lengthBuffer := make([]byte, 0, 8)
 
+	c := l.current()
+
 	// Get the length of the literal
-	for l.current != rightCurly {
-		if l.current < zero || l.current > nine {
+	for c != rightCurly {
+		if c < zero || c > nine {
 			err := parseError(fmt.Sprintf(
-				"Unexpected character %q in literal length", l.current))
+				"Unexpected character %q in literal length", c))
 			panic(err)
 		}
 
-		lengthBuffer = append(lengthBuffer, l.current)
-		l.consume()
+		lengthBuffer = append(lengthBuffer, c)
+		c = l.consume()
 	}
 
 	// Extract the literal length as an int
@@ -186,97 +180,124 @@ func (l *lexer) literal() *token {
 		panic(parseError(err.Error()))
 	}
 
-	// Consume the right curly and the newline that should follow
-	l.consumeEol()
-	if length > 0 {
-		l.consumeLf()
-	}
+	// Consider the next line
+	l.newLine()
 
-	buffer := make([]byte, 0, 64)
+	// Does the literal have a valid length?
+	if length <= 0 {
+		return ""
+	}
 
 	// Read the literal
-	for length > 0 {
-		buffer = append(buffer, l.current)
+	buffer := make([]byte, 0, length)
+	c = l.current()
+
+	for {
+		buffer = append(buffer, c)
+	
+		// Is this the end of the literal?
 		length -= 1
-		l.consume()
+		if length == 0 {
+			break
+		}
+
+		c = l.consumeAll()
 	}
 
-	return &token{string(buffer), stringTokenType}
-}
-
-// An astring
-func (l *lexer) astring() *token {
-	return l.nonquoted("ASTRING", astringExceptionsChar)
-}
-
-// A tag string
-func (l *lexer) tagString() *token {
-	return l.nonquoted("TAG", tagExceptionsChar)
-}
-
-// A list mailbox
-func (l *lexer) listMailbox() *token {
-	return l.nonquoted("LIST-MAILBOX", listMailboxExceptionsChar)
-}
-
-// Any unquoted string
-func (l *lexer) any() *token {
-	return l.nonquoted("ANY", nil)
+	return string(buffer)
 }
 
 // A non-quoted string
-func (l *lexer) nonquoted(name string, exceptions []byte) *token {
+func (l *lexer) nonquoted(name string, exceptions []byte) (bool, string) {
 
 	buffer := make([]byte, 0, 16)
 
-	for l.current > space &&
-		-1 == bytes.IndexByte(exceptions, l.current) &&
-		l.current < 0x7f {
+	// Get the current byte
+	c := l.current()
 
-		buffer = append(buffer, l.current)
-		l.consume()
+	for c > space && c < 0x7f && -1 == bytes.IndexByte(exceptions, c) {
+
+		buffer = append(buffer, c)
+		c = l.consume()
 	}
 
 	// Check that characters were consumed
 	if len(buffer) == 0 {
-		panic(parseError("Expected " + name))
+		return false, ""
 	}
 
-	return &token{string(buffer), stringTokenType}
+	return true, string(buffer)
 }
 
-// Skip whitespace and any trailing linefeeds from before
-func (l *lexer) skipSpace() {
-	if l.current == space || l.current == lf {
-		l.consume()
+//-------- Low level lexer functions -------------------------------------------
+
+// Consume a single byte and return the new character
+// Does not go through newlines
+func (l *lexer) consume() byte {
+
+	// Is there any line left?
+	if l.idx >= len(l.line)-1 {
+		// Return linefeed
+		return lf
 	}
+
+	// Move to the next byte
+	l.idx += 1
+	return l.current()
 }
 
-// Consume until end of line
-// This function does not consume the actual line feed as this
-// may be EOF
-func (l *lexer) consumeEol() {
+// Consume a single byte and return the new character
+// Goes through newlines
+func (l *lexer) consumeAll() byte {
 
-	// Consume until the linefeed
-	for l.current != lf {
-		l.consume()
+	// Is there any line left?
+	if l.idx >= len(l.line)-1 {
+		l.newLine()
+		return l.current()
 	}
+
+	// Move to the next byte
+	l.idx += 1
+	return l.current()
 }
 
-// Consume a line feed
-func (l *lexer) consumeLf() {
-	if l.current == lf {
-		l.consume()
-	}
+// Get the current byte
+func (l *lexer) current() byte {
+	return l.line[l.idx]
 }
 
-// Move forward 1 byte
-func (l *lexer) consume() {
-	var err error
-	l.current, err = l.reader.ReadByte()
+// Move onto a new line
+func (l *lexer) newLine() {
 
-	// Panic with a parser error if the read fails
+	// Read the line
+	line, err := l.reader.ReadLineBytes()
 	if err != nil {
 		panic(parseError(err.Error()))
 	}
+
+	// Reset the lexer - we cannot rewind past line boundaries
+	l.line = line
+	l.idx = 0
+	l.tokens = make([]int, 0, 8)
+}
+
+// Skip spaces
+func (l *lexer) skipSpace() {
+	c := l.current()
+
+	for c == space {
+		c = l.consume()
+	}
+}
+
+// Mark the start a new token
+func (l *lexer) startToken() {
+	l.tokens = append(l.tokens, l.idx)
+}
+
+// Move back one token
+func (l *lexer) pushBack() {
+	last := len(l.tokens) - 1
+	l.idx = l.tokens[last]
+	l.tokens = l.tokens[:last]
 }
