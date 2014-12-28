@@ -5,26 +5,30 @@ import (
 	"bufio"
 	"log"
 	"net"
+	"fmt"
 )
 
+// Default listen interface/port
+const DefaultListener = "0.0.0.0:143"
+
 // IMAP server configuration
-type Config struct {
-	MaxClients uint
-	Listeners  []Listener
-	Mailstore  Mailstore
+type config struct {
+	maxClients uint
+	listeners  []listener
+	mailstore  Mailstore
+}
+
+// Listener config
+type listener struct {
+	addr string
 }
 
 // An IMAP Server
 type Server struct {
 	// Server configuration
-	config *Config
+	config *config
 	// Number of active clients
 	activeClients uint
-}
-
-// A listener is listening on a given address. Ex: 0.0.0.0:193
-type Listener struct {
-	Addr string
 }
 
 // An IMAP Client as seen by an IMAP server
@@ -32,64 +36,33 @@ type client struct {
 	conn   net.Conn
 	bufin  *bufio.Reader
 	bufout *bufio.Writer
-	id     int
-	config *Config
-}
-
-// Create an IMAP server
-func Create(config *Config) *Server {
-	server := new(Server)
-	server.config = config
-
-	return server
+	id     string
+	config *config
 }
 
 // Return the default server configuration
-func DefaultConfig() *Config {
-	listeners := []Listener{
-		Listener{
-			Addr: "0.0.0.0:143",
-		},
-	}
-
-	return &Config{
-		Listeners:  listeners,
-		MaxClients: 8,
+func defaultConfig() *config {
+	return &config{
+		listeners:  make([]listener, 0, 4),
+		maxClients: 8,
 	}
 }
 
 // Add a mailstore to the config
 func Store(m Mailstore) func(*Server) error {
 	return func(s *Server) error {
-		s.config.Mailstore = m
+		s.config.mailstore = m
 		return nil
 	}
-}
-
-// test if 2 listeners are equal
-func equalListeners(l1, l2 []Listener) bool {
-	for i, l := range l1 {
-		if l != l2[i] {
-			return false
-		}
-	}
-	return true
 }
 
 // Add an interface to listen to
 func Listen(Addr string) func(*Server) error {
 	return func(s *Server) error {
-		// if we only have the default config we should override it
-		dc := DefaultConfig()
-		l := Listener{
-			Addr: Addr,
+		l := listener{
+			addr: Addr,
 		}
-		if equalListeners(dc.Listeners, s.config.Listeners) {
-			s.config.Listeners = []Listener{l}
-		} else {
-			s.config.Listeners = append(s.config.Listeners, l)
-		}
-
+		s.config.listeners = append(s.config.listeners, l)
 		return nil
 	}
 }
@@ -97,7 +70,7 @@ func Listen(Addr string) func(*Server) error {
 // Set MaxClients config
 func MaxClients(max uint) func(*Server) error {
 	return func(s *Server) error {
-		s.config.MaxClients = max
+		s.config.maxClients = max
 		return nil
 	}
 }
@@ -105,8 +78,7 @@ func MaxClients(max uint) func(*Server) error {
 func NewServer(options ...func(*Server) error) *Server {
 	// set the default config
 	s := &Server{}
-	dc := DefaultConfig()
-	s.config = dc
+	s.config = defaultConfig()
 
 	// override the config with the functional options
 	for _, option := range options {
@@ -116,61 +88,77 @@ func NewServer(options ...func(*Server) error) *Server {
 		}
 	}
 
-	//Check if we can listen on default ports, if not try to find a free port
-	if equalListeners(dc.Listeners, s.config.Listeners) {
-		listener := s.config.Listeners[0]
-		l, err := net.Listen("tcp", listener.Addr)
-		if err != nil {
-			l, err = net.Listen("tcp4", ":0") // this will ask the OS to give us a free port
-			if err != nil {
-				panic("Can't listen on any port")
-			}
-			l.Close()
-			s.config.Listeners[0].Addr = l.Addr().String()
-		} else {
-			l.Close()
-		}
-	}
-
 	return s
 }
 
 // Start an IMAP server
 func (s *Server) Start() error {
+
+	listeners := make([]net.Listener, 0, 4)
+
+	// Use a default listener if none exist
+	if len(s.config.listeners) == 0 {
+		s.config.listeners = append(s.config.listeners,
+			listener{addr: DefaultListener})
+	}
+
 	// Start listening for IMAP connections
-	for _, iface := range s.config.Listeners {
-		listener, err := net.Listen("tcp", iface.Addr)
+	for _, iface := range s.config.listeners {
+		listener, err := net.Listen("tcp", iface.addr)
 		if err != nil {
-			log.Fatalf("IMAP cannot listen on %s, %v", iface.Addr, err)
+			log.Printf("IMAP cannot listen on %s, %v", iface.addr, err)
+			return err
 		}
 
-		log.Print("IMAP server listening on ", iface.Addr)
+		listeners = append(listeners, listener)
+	}
 
-		clientNumber := 1
+	// Start the server on each port
+	n := len(listeners)
+	for i := 0; i < n; i += 1 {
+		listener := listeners[i]
 
-		for {
-			// Accept a connection from a new client
-			conn, err := listener.Accept()
-			if err != nil {
-				log.Print("IMAP accept error, ", err)
-				continue
-			}
-
-			// Handle the client
-			client := &client{
-				conn:   conn,
-				bufin:  bufio.NewReader(conn),
-				bufout: bufio.NewWriter(conn),
-				id:     clientNumber,
-				config: s.config,
-			}
-
-			go client.handle()
-
-			clientNumber += 1
+		// Start each listener in a separate go routine
+		// except for the last one
+		if i < n-1 {
+			go s.runListener(listener, i)
+		} else {
+			s.runListener(listener, i)
 		}
 	}
+
 	return nil
+}
+
+// Run a listener
+func (s *Server) runListener(listener net.Listener, id int) {
+
+	log.Printf("IMAP server %d listening on %s", id, listener.Addr().String())
+
+	clientNumber := 1
+
+	for {
+		// Accept a connection from a new client
+		conn, err := listener.Accept()
+		if err != nil {
+			log.Print("IMAP accept error, ", err)
+			continue
+		}
+
+		// Handle the client
+		client := &client{
+			conn:   conn,
+			bufin:  bufio.NewReader(conn),
+			bufout: bufio.NewWriter(conn),
+			id:     fmt.Sprint(id, "/", clientNumber),
+			config: s.config,
+		}
+
+		go client.handle()
+
+		clientNumber += 1
+	}
+
 }
 
 // Handle requests from an IMAP client
@@ -231,5 +219,5 @@ func (c *client) close() {
 
 // Log an error
 func (c *client) logError(err error) {
-	log.Printf("IMAP client %d, %v", c.id, err)
+	log.Printf("IMAP client %s, %v", c.id, err)
 }

@@ -17,17 +17,17 @@ const (
 // An IMAP session
 type session struct {
 	// The client id
-	id int
+	id string
 	// The state of the session
 	st state
 	// The currently selected mailbox (if st == selected)
 	mailbox *Mailbox
 	// IMAP configuration
-	config *Config
+	config *config
 }
 
 // Create a new IMAP session
-func createSession(id int, config *Config) *session {
+func createSession(id string, config *config) *session {
 	return &session{
 		id:     id,
 		st:     notAuthenticated,
@@ -36,7 +36,7 @@ func createSession(id int, config *Config) *session {
 
 // Log a message with session information
 func (s *session) log(info ...interface{}) {
-	preamble := fmt.Sprintf("IMAP (%d) ", s.id)
+	preamble := fmt.Sprintf("IMAP (%s) ", s.id)
 	message := []interface{}{preamble}
 	message = append(message, info...)
 	log.Print(message...)
@@ -45,7 +45,7 @@ func (s *session) log(info ...interface{}) {
 // Select a mailbox - returns true if the mailbox exists
 func (s *session) selectMailbox(path []string) (bool, error) {
 	// Lookup the mailbox
-	mailstore := s.config.Mailstore
+	mailstore := s.config.mailstore
 	mbox, err := mailstore.GetMailbox(path)
 
 	if err != nil {
@@ -79,7 +79,7 @@ func (s *session) list(reference []string, pattern []string) ([]*Mailbox, error)
 
 	// Just return a single mailbox if there are no wildcards
 	if wildcard == -1 {
-		mbox, err := s.config.Mailstore.GetMailbox(path)
+		mbox, err := s.config.mailstore.GetMailbox(path)
 		if err != nil {
 			return ret, err
 		}
@@ -93,7 +93,7 @@ func (s *session) list(reference []string, pattern []string) ([]*Mailbox, error)
 
 // Add mailbox information to the given response
 func (s *session) addMailboxInfo(resp *response) error {
-	mailstore := s.config.Mailstore
+	mailstore := s.config.mailstore
 
 	// Get the mailbox information from the mailstore
 	firstUnseen, err := mailstore.FirstUnseen(s.mailbox.Id)
@@ -133,7 +133,7 @@ func copySlice(s []string) []string {
 func (s *session) depthFirstMailboxes(
 	results []*Mailbox, path []string, pattern []string) ([]*Mailbox, error) {
 
-	mailstore := s.config.Mailstore
+	mailstore := s.config.mailstore
 
 	// Stop recursing if the pattern is empty or if the path is too long
 	if len(pattern) == 0 || len(path) > 20 {
