@@ -192,9 +192,9 @@ type fetch struct {
 
 // Fetch attachments
 type fetchAttachment struct {
-	attachment fetchAttachmentId
-	section    *fetchSection
-	partial    *fetchPartial
+	id      fetchAttachmentId
+	section *fetchSection
+	partial *fetchPartial
 }
 
 type fetchAttachmentId int
@@ -205,6 +205,7 @@ const (
 	internalDateFetchAtt
 	rfc822FetchAtt
 	bodyFetchAtt
+	bodySectionFetchAtt
 	uidFetchAtt
 	bodyStructureFetchAtt
 	bodyPeekFetchAtt
@@ -223,8 +224,9 @@ const (
 // The section of fetch attachment
 type fetchSection struct {
 	numericSpecifier string
-	part partSpecifier 
-	fields []string
+	part             partSpecifier
+	mime             bool
+	fields           []string
 }
 
 type partSpecifier int
@@ -239,19 +241,14 @@ const (
 // A byte range
 type fetchPartial struct {
 	fromOctet uint32
-	toOctet uint32
+	toOctet   uint32
 }
 
 // Message sequence number for fetch
 type sequenceNumber struct {
-	value      uint32
+	value      uint32 // 0 indicates empty sequence number
 	isWildcard bool
 }
-
-const (
-	// Value of an empty sequence number
-	emptySequenceNumber = 0
-)
 
 // Sequence range, end can be emptySequenceNumber to
 // specify a sequence number

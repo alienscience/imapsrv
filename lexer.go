@@ -177,7 +177,7 @@ func (l *lexer) fetchMacro() (bool, fetchCommandMacro) {
 		return false, invalidFetchMacro
 	}
 
-	// Convert the work to a fetch macro
+	// Convert the word to a fetch macro
 	switch strings.ToLower(word) {
 	case "all":
 		return ok, allFetchMacro

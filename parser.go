@@ -213,61 +213,58 @@ func (p *parser) expectSequenceNumber() sequenceNumber {
 // Expect one or more fetch attachments
 func (p *parser) expectFetchAttachments(isMultiple bool) []fetchAttachment {
 
-	// TODO: check and fix this
-	tok := p.nextToken(asAString)
-	switch tok.tokType {
-	case stringTokenType:
-		// This must be a macro or a fetch attachment
-		fetchAttachment := p.matchFetchArg(tok.value)
-		ret.attachments = append(ret.attachments, fetchAttachment)
-	case leftParenTokenType:
-		// This should be a space-delimited list of fetch attachments
-		for t := p.nextToken(asAString); t.tokType == stringTokenType; t = p.nextToken(asAString) {
-			fetchAttachment := p.matchFetchArg(tok.value)
-			ret.attachments = append(ret.attachments, fetchAttachment)
+	ret := make([]fetchAttachment, 0, 4)
+
+	for {
+		att := fetchAttachment{}
+
+		// Check for closing parenthesis
+		if isMultiple && p.lexer.rightParen() {
+			return ret
 		}
 
-		// Expect but ignore the closing bracket
-		p.match(rightParenTokenType, asAString)
-	default:
-		msg := fmt.Sprintf("Parser expected '(' or a string but got %v", tok.tokType)
-		err := parseError(msg)
+		// Get the fetch attachment
+		att.id = p.expectFetchAttachment()
+
+		// Some fetch attachments have arguments
+		if att.id == bodySectionFetchAtt || att.id == bodyPeekFetchAtt {
+			att.section = p.expectSection()
+			att.partial = p.optionalFetchPartial()
+		}
+
+		ret = append(ret, att)
+
+		// Is there only one fetch attachment?
+		if !isMultiple {
+			return ret
+		}
+	}
+
+}
+
+// Expect a fetch section
+func (p *parser) expectSection() *fetchSection {
+
+	// The section must start with a bracket
+	if !p.lexer.leftBracket() {
+		err := parseError("Expected [ at start of section")
 		panic(err)
 	}
 
-	return ret
-
-	// Be case insensitive
-	lc := strings.ToLower(s)
-	ret := fetchAttachment{attachment: lc}
-
-	// Handle special cases that are longer than one token
-	if lc == "body" || lc == "body.peek" {
-		// Body is followed by a section spec
-		ret.section = p.matchSection(sectionStr)
-
-		// and an optional partial spec
-		// TODO: check this
-		tok := p.nextToken(asPartialOrAString)
-		if tok.tokType == partialTokenType {
-			ret.partial = p.asPartial(tok.value)
-		} else {
-			// This token should be an astring that belongs to the next argument
-			p.pushBack(tok)
-		}
+	ret := &fetchSection{
+		fields: make([]string, 0, 4),
 	}
 
-	return ret
-}
-
-// Match a section
-func (p *parser) matchSection() fetchSection {
-	p.lexer.expectChar(leftBracket)
-	if p.matchSectionMsgText() {
-		p.lexer.matchRightBracket()
+	ok, part := p.lexer.sectionMsgText()
+	if ok {
+		ret.part = part
 	} else {
-		p.matchSectionPart()
-		if p.lexer.matchChar(rightBracket) {
+		// This must be a section part
+		ret.numericSpecifier = p.lexer.sectionPart()
+
+		// Followed by an optional "." and section text
+		if p.lexer.dot() {
+			ret.mime, ret.part = p.expectSectionText()
 		}
 	}
 }
