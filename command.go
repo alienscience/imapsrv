@@ -200,14 +200,17 @@ type fetchAttachment struct {
 type fetchAttachmentId int
 
 const (
-	envelopeFetchAtt = iota
+	invalidFetchAtt = iota
+	envelopeFetchAtt
 	flagsFetchAtt
 	internalDateFetchAtt
-	rfc822FetchAtt
+	rfc822HeaderFetchAtt
+	rfc822SizeFetchAtt
+	rfc822TextFetchAtt
 	bodyFetchAtt
-	bodySectionFetchAtt
-	uidFetchAtt
 	bodyStructureFetchAtt
+	uidFetchAtt
+	bodySectionFetchAtt
 	bodyPeekFetchAtt
 )
 

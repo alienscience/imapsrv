@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/textproto"
 	"strconv"
-	"strings"
 )
 
 type lexer struct {
@@ -178,29 +177,78 @@ func (l *lexer) fetchMacro() (bool, fetchCommandMacro) {
 	}
 
 	// Convert the word to a fetch macro
-	switch strings.ToLower(word) {
-	case "all":
+	switch word {
+	case "ALL":
 		return ok, allFetchMacro
-	case "full":
+	case "FULL":
 		return ok, fullFetchMacro
-	case "fast":
+	case "FAST":
 		return ok, fastFetchMacro
 	default:
 		return false, invalidFetchMacro
 	}
 }
 
+// A fetch attachment
+func (l *lexer) fetchAttachment() (bool, fetchAttachmentId) {
+	l.skipSpace()
+	l.startToken()
+
+	ok, word := l.fetchAttachmentWord()
+	if !ok {
+		return false, invalidFetchAtt
+	}
+
+	// Convert the word to a fetch attachment
+	switch word {
+	case "ENVELOPE":
+		return ok, envelopeFetchAtt
+	case "FLAGS":
+		return ok, flagsFetchAtt
+	case "INTERNALDATE":
+		return ok, internalDateFetchAtt
+	case "RFC822.HEADER":
+		return ok, rfc822HeaderFetchAtt
+	case "RFC822.SIZE":
+		return ok, rfc822SizeFetchAtt
+	case "RFC822.TEXT":
+		return ok, rfc822TextFetchAtt
+	case "BODY":
+		// The parser will decide if this is BODY followed by section
+		return ok, bodyFetchAtt
+	case "BODYSTRUCTURE":
+		return ok, bodyStructureFetchAtt
+	case "UID":
+		return ok, uidFetchAtt
+	case "BODY.PEEK":	
+		return ok, bodyPeekFetchAtt
+	default:
+		return false, invalidFetchAtt
+	}
+
+}
+
 // A left parenthesis
 func (l *lexer) leftParen() bool {
-	if l.current() == leftParenthesis {
+	return l.singleChar(leftParenthesis)
+}
+
+// A right parenthesis
+func (l *lexer) rightParen() bool {
+	return l.singleChar(rightParenthesis)
+}
+
+//-------- IMAP token helper functions -----------------------------------------
+
+// Look for a single 8-bit character and say if it was successful or not
+func (l *lexer) singleChar(ch byte) bool {
+	if l.current() == ch {
 		l.consume()
 		return true
 	}
 
 	return false
 }
-
-//-------- IMAP token helper functions -----------------------------------------
 
 // Handle a string that can be bare, a literal or quoted
 func (l *lexer) generalString(name string, exceptions []byte) (bool, string) {
@@ -413,8 +461,18 @@ func (l *lexer) startToken() {
 	l.tokens = append(l.tokens, l.idx)
 }
 
-// Move back one token
+// Move back one character
 func (l *lexer) pushBack() {
+	if l.idx < 1 {
+		panic(parseError("pushBack called on first character of line"))
+	}
+
+	l.idx -= 1
+}
+
+// Move back one token
+// TODO: remove l.tokens if this function is not needed
+func (l *lexer) pushBackToken() {
 	last := len(l.tokens) - 1
 	l.idx = l.tokens[last]
 	l.tokens = l.tokens[:last]

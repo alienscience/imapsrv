@@ -38,6 +38,7 @@ func (p *parser) next() command {
 	rawCommand := p.expectString(p.lexer.astring)
 
 	// Parse the command based on its lowercase value
+	// This makes typing over telnet easier
 	lcCommand := strings.ToLower(rawCommand)
 
 	switch lcCommand {
@@ -227,8 +228,18 @@ func (p *parser) expectFetchAttachments(isMultiple bool) []fetchAttachment {
 		att.id = p.expectFetchAttachment()
 
 		// Some fetch attachments have arguments
-		if att.id == bodySectionFetchAtt || att.id == bodyPeekFetchAtt {
-			att.section = p.expectSection()
+		if att.id == bodyFetchAtt {
+			ok, section := p.section()
+			if ok {
+				att.id = bodySectionFetchAtt
+				att.partial = p.optionalFetchPartial()
+			}
+		} else if att.id == bodyPeekFetchAtt {
+			ok, section := p.section()
+			if !ok {
+				err := parseError("BODY.PEEK must be followed by section")
+				panic(err)
+			}
 			att.partial = p.optionalFetchPartial()
 		}
 
@@ -242,13 +253,23 @@ func (p *parser) expectFetchAttachments(isMultiple bool) []fetchAttachment {
 
 }
 
+// Expect a fetch attachment
+func (p *parser) expectFetchAttachment() fetchAttachmentId {
+	ok, ret := p.lexer.fetchAttachment()
+	if !ok {
+		err := parseError("Expected fetch attachment")
+		panic(err)
+	}
+
+	return ret
+}
+
 // Expect a fetch section
-func (p *parser) expectSection() *fetchSection {
+func (p *parser) section() (bool, *fetchSection) {
 
 	// The section must start with a bracket
 	if !p.lexer.leftBracket() {
-		err := parseError("Expected [ at start of section")
-		panic(err)
+		return false, nil
 	}
 
 	ret := &fetchSection{
@@ -267,4 +288,6 @@ func (p *parser) expectSection() *fetchSection {
 			ret.mime, ret.part = p.expectSectionText()
 		}
 	}
+
+	return true, ret
 }
