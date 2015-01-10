@@ -72,6 +72,8 @@ func (p *parser) capability(tag string) command {
 }
 
 // Create a login command
+//
+//   login           = "LOGIN" SP userid SP password
 func (p *parser) login(tag string) command {
 
 	// Get the command arguments
@@ -88,6 +90,8 @@ func (p *parser) logout(tag string) command {
 }
 
 // Create a select command
+//
+//    select          = "SELECT" SP mailbox
 func (p *parser) selectC(tag string) command {
 
 	// Get the mailbox name
@@ -97,6 +101,8 @@ func (p *parser) selectC(tag string) command {
 }
 
 // Create a list command
+//
+//    list            = "LIST" SP mailbox SP list-mailbox
 func (p *parser) list(tag string) command {
 
 	// Get the command arguments
@@ -111,6 +117,9 @@ func (p *parser) list(tag string) command {
 }
 
 // Create a fetch command
+//
+//    fetch           = "FETCH" SP sequence-set SP ("ALL" / "FULL" / "FAST" /
+//                      fetch-att / "(" fetch-att *(SP fetch-att) ")")
 func (p *parser) fetch(tag string) command {
 
 	ret := createFetchCommand(tag)
@@ -154,6 +163,8 @@ func (p *parser) expectString(lex func() (bool, string)) string {
 }
 
 // A sequence set or panic
+//
+//    sequence-set    = (seq-number / seq-range) *("," sequence-set)
 func (p *parser) expectSequenceSet() []sequenceRange {
 
 	ret := make([]sequenceRange, 0, 4)
@@ -191,9 +202,11 @@ func (p *parser) expectSequenceSet() []sequenceRange {
 }
 
 // A sequence number or panic
+//
+//    seq-number      = nz-number / "*"
 func (p *parser) expectSequenceNumber() sequenceNumber {
 
-	ok, seqnum := p.lexer.sequenceNumber()
+	ok, seqnum := p.lexer.nonZeroNumber()
 
 	if !ok {
 		// This could be a wildcard
@@ -212,6 +225,8 @@ func (p *parser) expectSequenceNumber() sequenceNumber {
 }
 
 // Expect one or more fetch attachments
+//
+//    fetch-att / "(" fetch-att *(SP fetch-att) ")")
 func (p *parser) expectFetchAttachments(isMultiple bool) []fetchAttachment {
 
 	ret := make([]fetchAttachment, 0, 4)
@@ -254,6 +269,12 @@ func (p *parser) expectFetchAttachments(isMultiple bool) []fetchAttachment {
 }
 
 // Expect a fetch attachment
+//
+//    fetch-att       = "ENVELOPE" / "FLAGS" / "INTERNALDATE" /
+//                      "RFC822" [".HEADER" / ".SIZE" / ".TEXT"] /
+//                      "BODY" ["STRUCTURE"] / "UID" /
+//                      "BODY"
+//                      "BODY.PEEK"
 func (p *parser) expectFetchAttachment() fetchAttachmentId {
 	ok, ret := p.lexer.fetchAttachment()
 	if !ok {
@@ -265,23 +286,22 @@ func (p *parser) expectFetchAttachment() fetchAttachmentId {
 }
 
 // Expect a fetch section
+//
+//    section         = "[" [section-spec] "]"
+//    section-spec    = section-msgtext / (section-part ["." section-text])
 func (p *parser) section() (bool, *fetchSection) {
 
-	// The section must start with a bracket
+	// The section must start with a [
 	if !p.lexer.leftBracket() {
 		return false, nil
 	}
 
-	ret := &fetchSection{
-		fields: make([]string, 0, 4),
-	}
+	ret := &fetchSection{}
 
-	ok, part := p.lexer.sectionMsgText()
-	if ok {
-		ret.part = part
-	} else {
+	ok := p.sectionMsgText(ret)
+	if !ok {
 		// This must be a section part
-		ret.numericSpecifier = p.lexer.sectionPart()
+		ret.section = p.expectSectionPart()
 
 		// Followed by an optional "." and section text
 		if p.lexer.dot() {
@@ -289,5 +309,106 @@ func (p *parser) section() (bool, *fetchSection) {
 		}
 	}
 
+	// The section must end with a ]
+	if !p.lexer.rightBracket() {
+		err := parseError("Expected section to end with ']'")
+		panic(err)
+	}
+
 	return true, ret
 }
+
+// Get the section-msgtext that can be part of a section spec
+//
+//    section-msgtext = "HEADER" / "HEADER.FIELDS" [".NOT"] SP header-list /
+//                      "TEXT"
+func (p *parser) sectionMsgText(section *fetchSection) bool {
+
+	// The section-msgtext must start with a part specifier
+	ok, partSpecifier := p.lexer.partSpecifier()
+	if !ok {
+		return false
+	}
+
+	// Some part specifiers are followed by a header-list
+	switch partSpecifier {
+	case headerFieldsPart, headerFieldsNotPart:
+		section.fields = p.expectHeaderList()
+	}
+
+	// Success
+	section.part = partSpecifier
+	return true
+}
+
+// Optionally read a fetch partial, returns nil if no fetchPartial exists
+//
+//   "<" number "." nz-number ">"
+func (p *parser) optionalFetchPartial() *fetchPartial {
+
+	// The fetch partial must start with a less than sign
+	if !p.lexer.lessThan() {
+		return nil
+	}
+
+	// Then a number
+	ok, n := p.lexer.number()
+
+	if !ok {
+		err := parseError("Expected number in fetch partial")
+		panic(err)
+	}
+
+	ret := &fetchPartial{}
+	ret.fromOctet = n
+
+	// Then a non-zero number
+	ok, nz := p.lexer.nzNumber()
+
+	if !ok {
+		err := parseError("Expected none-zero number in fetch partial")
+		panic(err)
+	}
+
+	// Then a greater than sign
+	if !p.lexer.greaterThan() {
+		err := parseError("Fetch partial should end with '>'")
+		panic(err)
+	}
+
+	return ret
+}
+
+// Parse the section-part
+//
+//    section-spec    = section-msgtext / (section-part ["." section-text])
+//    section-part    = nz-number *("." nz-number)
+//    section-text    = section-msgtext / "MIME"
+func (p *parser) expectSectionPart() []uint32 {
+
+	ret := make([]uint32, 0, 4)
+
+	// Loop through the section and subsection numbers
+	for {
+		ok, nz := p.lexer.nonZeroNumber()
+		if !ok {
+			// This might be the start of the section text
+			if len(ret) > 0 {
+				// Move back to the "."
+				p.lexer.pushBackToken()
+				p.lexer.pushBack()
+				return ret
+			} else {
+				err := parseError("Expected a non-zero number in section-part")
+				panic(err)
+			}
+		}
+
+		ret = append(ret, nz)
+
+		if !p.lexer.dot() {
+			return ret
+		}
+	}
+}
+

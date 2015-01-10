@@ -29,7 +29,8 @@ const (
 	space            = 0x20
 	doubleQuote      = 0x22
 	plus             = 0x2b
-	comma            = 0x2b
+	comma            = 0x2c
+	dot              = 0x2e
 	zero             = 0x30
 	nine             = 0x39
 	colon            = 0x3a
@@ -37,7 +38,10 @@ const (
 	rightCurly       = 0x7d
 	leftParenthesis  = 0x28
 	rightParenthesis = 0x29
-	rightBracket     = 0x5d
+	ltChar           = 0x3c
+	gtChar           = 0x3e
+	leftBracketChar  = 0x5b
+	rightBracketChar = 0x5d
 	percent          = 0x25
 	asterisk         = 0x2a
 	backslash        = 0x5c
@@ -71,7 +75,7 @@ var listMailboxExceptionsChar = []byte{
 	space,
 	leftParenthesis,
 	rightParenthesis,
-	rightBracket,
+	rightBracketChar,
 	backslash,
 	leftCurly,
 }
@@ -108,8 +112,10 @@ func (l *lexer) listMailbox() (bool, string) {
 	return l.generalString("LIST-MAILBOX", listMailboxExceptionsChar)
 }
 
-// A sequence number
-func (l *lexer) sequenceNumber() (bool, uint32) {
+// A non-zero number
+func (l *lexer) nonZeroNumber() (bool, uint32) {
+
+	l.startToken()
 
 	// Read a sequence of digits
 	buffer := make([]byte, 0, 8)
@@ -118,8 +124,7 @@ func (l *lexer) sequenceNumber() (bool, uint32) {
 
 	for current >= zero && current <= nine {
 		buffer = append(buffer, current)
-		l.consume()
-		current = l.current()
+		current = l.consume()
 	}
 
 	// Check that at least one digit was read
@@ -220,7 +225,7 @@ func (l *lexer) fetchAttachment() (bool, fetchAttachmentId) {
 		return ok, bodyStructureFetchAtt
 	case "UID":
 		return ok, uidFetchAtt
-	case "BODY.PEEK":	
+	case "BODY.PEEK":
 		return ok, bodyPeekFetchAtt
 	default:
 		return false, invalidFetchAtt
@@ -237,6 +242,54 @@ func (l *lexer) leftParen() bool {
 func (l *lexer) rightParen() bool {
 	return l.singleChar(rightParenthesis)
 }
+
+// A less than
+func (l *lexer) lessThan() bool {
+	return l.singleChar(ltChar)
+}
+
+// A greater than
+func (l *lexer) greaterThan() bool {
+	return l.singleChar(gtChar)
+}
+
+// A left [
+func (l *lexer) leftBracket() bool {
+	return l.singleChar(leftBracketChar)
+}
+
+// A right ]
+func (l *lexer) rightBracket() bool {
+	return l.singleChar(rightBracketChar)
+}
+
+// A .
+func (l *lexer) dot() bool {
+	return l.singleChar(dot)
+}
+
+// A fetch attachment identifier
+func (l *lexer) fetchAttachmentWord() (bool, string) {
+
+	buffer := make([]byte, 0, 16)
+
+	c := l.current()
+
+	// Uppercase alphanumeric or a dot
+	for (c > 0x40 && c < 0x5b) || (c > 0x30 && c < 0x3a) || c == dot {
+
+		buffer = append(buffer, c)
+		c = l.consume()
+	}
+
+	// Check that characters were consumed
+	if len(buffer) == 0 {
+		return false, ""
+	}
+
+	return true, string(buffer)
+}
+
 
 //-------- IMAP token helper functions -----------------------------------------
 
@@ -401,14 +454,10 @@ func (l *lexer) asciiWord() (bool, string) {
 // Does not go through newlines
 func (l *lexer) consume() byte {
 
-	// Is there any line left?
-	if l.idx >= len(l.line)-1 {
-		// Return linefeed
-		return lf
+	// Move to the next byte if possible
+	if l.idx < len(l.line)-1 {
+		l.idx += 1
 	}
-
-	// Move to the next byte
-	l.idx += 1
 	return l.current()
 }
 
@@ -429,7 +478,12 @@ func (l *lexer) consumeAll() byte {
 
 // Get the current byte
 func (l *lexer) current() byte {
-	return l.line[l.idx]
+	if l.idx < len(l.line)-1 {
+		return l.line[l.idx]
+	}
+
+	// Return linefeed if there are no characters left
+	return lf
 }
 
 // Move onto a new line
@@ -471,7 +525,6 @@ func (l *lexer) pushBack() {
 }
 
 // Move back one token
-// TODO: remove l.tokens if this function is not needed
 func (l *lexer) pushBackToken() {
 	last := len(l.tokens) - 1
 	l.idx = l.tokens[last]

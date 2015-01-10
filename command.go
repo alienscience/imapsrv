@@ -226,10 +226,10 @@ const (
 
 // The section of fetch attachment
 type fetchSection struct {
-	numericSpecifier string
-	part             partSpecifier
-	mime             bool
-	fields           []string
+	section []uint32
+	part    partSpecifier
+	mime    bool
+	fields  []string
 }
 
 type partSpecifier int
@@ -243,7 +243,7 @@ const (
 
 // A byte range
 type fetchPartial struct {
-	fromOctet uint32
+	fromOctet int32
 	toOctet   uint32
 }
 
