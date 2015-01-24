@@ -463,6 +463,6 @@ func (p *parser) expectHeaderList() []string {
 		// Stop if there is a closing paren
 		if p.lexer.rightParen() {
 			return ret
-		}		
+		}
 	}
 }

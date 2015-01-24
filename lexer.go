@@ -495,7 +495,7 @@ func (l *lexer) asciiWord() (bool, string) {
 	return true, string(buffer)
 }
 
-// Alpha-numeric containing dots, e.g a fetch attachment word 
+// Alpha-numeric containing dots, e.g a fetch attachment word
 func (l *lexer) dottedWord() (bool, string) {
 
 	buffer := make([]byte, 0, 16)
@@ -516,7 +516,6 @@ func (l *lexer) dottedWord() (bool, string) {
 
 	return true, string(buffer)
 }
-
 
 //-------- Low level lexer functions -------------------------------------------
 
