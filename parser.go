@@ -206,7 +206,7 @@ func (p *parser) expectSequenceSet() []sequenceRange {
 //    seq-number      = nz-number / "*"
 func (p *parser) expectSequenceNumber() sequenceNumber {
 
-	ok, seqnum := p.lexer.nonZeroNumber()
+	ok, seqnum := p.lexer.nonZeroInteger()
 
 	if !ok {
 		// This could be a wildcard
@@ -247,6 +247,7 @@ func (p *parser) expectFetchAttachments(isMultiple bool) []fetchAttachment {
 			ok, section := p.section()
 			if ok {
 				att.id = bodySectionFetchAtt
+				att.section = section
 				att.partial = p.optionalFetchPartial()
 			}
 		} else if att.id == bodyPeekFetchAtt {
@@ -255,6 +256,7 @@ func (p *parser) expectFetchAttachments(isMultiple bool) []fetchAttachment {
 				err := parseError("BODY.PEEK must be followed by section")
 				panic(err)
 			}
+			att.section = section
 			att.partial = p.optionalFetchPartial()
 		}
 
@@ -305,7 +307,7 @@ func (p *parser) section() (bool, *fetchSection) {
 
 		// Followed by an optional "." and section text
 		if p.lexer.dot() {
-			ret.mime, ret.part = p.expectSectionText()
+			p.expectSectionText(ret)
 		}
 	}
 
@@ -327,6 +329,7 @@ func (p *parser) sectionMsgText(section *fetchSection) bool {
 	// The section-msgtext must start with a part specifier
 	ok, partSpecifier := p.lexer.partSpecifier()
 	if !ok {
+		p.lexer.pushBackToken()
 		return false
 	}
 
@@ -352,7 +355,7 @@ func (p *parser) optionalFetchPartial() *fetchPartial {
 	}
 
 	// Then a number
-	ok, n := p.lexer.number()
+	ok, n := p.lexer.integer()
 
 	if !ok {
 		err := parseError("Expected number in fetch partial")
@@ -363,12 +366,14 @@ func (p *parser) optionalFetchPartial() *fetchPartial {
 	ret.fromOctet = n
 
 	// Then a non-zero number
-	ok, nz := p.lexer.nzNumber()
+	ok, nz := p.lexer.nonZeroInteger()
 
 	if !ok {
 		err := parseError("Expected none-zero number in fetch partial")
 		panic(err)
 	}
+
+	ret.toOctet = nz
 
 	// Then a greater than sign
 	if !p.lexer.greaterThan() {
@@ -390,7 +395,7 @@ func (p *parser) expectSectionPart() []uint32 {
 
 	// Loop through the section and subsection numbers
 	for {
-		ok, nz := p.lexer.nonZeroNumber()
+		ok, nz := p.lexer.nonZeroInteger()
 		if !ok {
 			// This might be the start of the section text
 			if len(ret) > 0 {
@@ -412,3 +417,52 @@ func (p *parser) expectSectionPart() []uint32 {
 	}
 }
 
+// Parse the section text
+//
+//    section-text    = section-msgtext / "MIME"
+func (p *parser) expectSectionText(section *fetchSection) {
+
+	// Is this section-msgtext?
+	if p.sectionMsgText(section) {
+		return
+	}
+
+	// It must be "MIME"
+	if !p.lexer.mime() {
+		err := parseError("Expected section-msgtext or MIME")
+		panic(err)
+	}
+
+	section.mime = true
+}
+
+// Get a list of header fields
+//
+//    header-list     = "(" header-fld-name *(SP header-fld-name) ")"
+//    header-fld-name = astring
+func (p *parser) expectHeaderList() []string {
+
+	if !p.lexer.leftParen() {
+		err := parseError("Expected open paren at start of header-list")
+		panic(err)
+	}
+
+	ret := make([]string, 0, 4)
+
+	for {
+		// Get the header field name
+		ok, headerFieldName := p.lexer.astring()
+
+		if !ok {
+			err := parseError("Expected header-fld-name in header-list")
+			panic(err)
+		}
+
+		ret = append(ret, headerFieldName)
+
+		// Stop if there is a closing paren
+		if p.lexer.rightParen() {
+			return ret
+		}		
+	}
+}

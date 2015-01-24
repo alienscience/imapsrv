@@ -30,6 +30,7 @@ const (
 	doubleQuote      = 0x22
 	plus             = 0x2b
 	comma            = 0x2c
+	minus            = 0x2d
 	dot              = 0x2e
 	zero             = 0x30
 	nine             = 0x39
@@ -112,8 +113,37 @@ func (l *lexer) listMailbox() (bool, string) {
 	return l.generalString("LIST-MAILBOX", listMailboxExceptionsChar)
 }
 
-// A non-zero number
-func (l *lexer) nonZeroNumber() (bool, uint32) {
+// An integer
+func (l *lexer) integer() (bool, int32) {
+	l.startToken()
+
+	// Read a sequence of digits with sign
+	buffer := make([]byte, 0, 8)
+
+	current := l.current()
+
+	for current >= zero && current <= nine || current == minus {
+		buffer = append(buffer, current)
+		current = l.consume()
+	}
+
+	// Check that at least one character was read
+	if len(buffer) == 0 {
+		return false, 0
+	}
+
+	// Convert to a number
+	num, err := strconv.ParseInt(string(buffer), 10, 32)
+	if err != nil {
+		return false, 0
+	}
+
+	return true, int32(num)
+
+}
+
+// A non-zero integer
+func (l *lexer) nonZeroInteger() (bool, uint32) {
 
 	l.startToken()
 
@@ -199,7 +229,7 @@ func (l *lexer) fetchAttachment() (bool, fetchAttachmentId) {
 	l.skipSpace()
 	l.startToken()
 
-	ok, word := l.fetchAttachmentWord()
+	ok, word := l.dottedWord()
 	if !ok {
 		return false, invalidFetchAtt
 	}
@@ -231,6 +261,46 @@ func (l *lexer) fetchAttachment() (bool, fetchAttachmentId) {
 		return false, invalidFetchAtt
 	}
 
+}
+
+// A fetch attachment
+func (l *lexer) partSpecifier() (bool, partSpecifier) {
+	l.skipSpace()
+	l.startToken()
+
+	ok, word := l.dottedWord()
+	if !ok {
+		return false, invalidPart
+	}
+
+	// Convert the word to a part specifier
+	switch word {
+	case "HEADER":
+		return ok, headerPart
+	case "HEADER.FIELDS":
+		return ok, headerFieldsPart
+	case "HEADER.FIELDS.NOT":
+		return ok, headerFieldsNotPart
+	case "TEXT":
+		return ok, textPart
+	default:
+		return false, invalidPart
+	}
+
+}
+
+// The word "MIME"
+func (l *lexer) mime() bool {
+	l.skipSpace()
+	l.startToken()
+
+	ok, word := l.asciiWord()
+
+	if ok && word == "MIME" {
+		return true
+	}
+
+	return false
 }
 
 // A left parenthesis
@@ -267,29 +337,6 @@ func (l *lexer) rightBracket() bool {
 func (l *lexer) dot() bool {
 	return l.singleChar(dot)
 }
-
-// A fetch attachment identifier
-func (l *lexer) fetchAttachmentWord() (bool, string) {
-
-	buffer := make([]byte, 0, 16)
-
-	c := l.current()
-
-	// Uppercase alphanumeric or a dot
-	for (c > 0x40 && c < 0x5b) || (c > 0x30 && c < 0x3a) || c == dot {
-
-		buffer = append(buffer, c)
-		c = l.consume()
-	}
-
-	// Check that characters were consumed
-	if len(buffer) == 0 {
-		return false, ""
-	}
-
-	return true, string(buffer)
-}
-
 
 //-------- IMAP token helper functions -----------------------------------------
 
@@ -447,6 +494,29 @@ func (l *lexer) asciiWord() (bool, string) {
 
 	return true, string(buffer)
 }
+
+// Alpha-numeric containing dots, e.g a fetch attachment word 
+func (l *lexer) dottedWord() (bool, string) {
+
+	buffer := make([]byte, 0, 16)
+
+	c := l.current()
+
+	// Uppercase alphanumeric or a dot
+	for (c > 0x40 && c < 0x5b) || (c > 0x30 && c < 0x3a) || c == dot {
+
+		buffer = append(buffer, c)
+		c = l.consume()
+	}
+
+	// Check that characters were consumed
+	if len(buffer) == 0 {
+		return false, ""
+	}
+
+	return true, string(buffer)
+}
+
 
 //-------- Low level lexer functions -------------------------------------------
 

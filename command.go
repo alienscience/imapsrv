@@ -192,8 +192,11 @@ type fetch struct {
 
 // Fetch attachments
 type fetchAttachment struct {
+	// What to fetch
 	id      fetchAttachmentId
+	// nil if no fetchSection exists
 	section *fetchSection
+	// nil if no fetchPartial exists
 	partial *fetchPartial
 }
 
@@ -235,7 +238,8 @@ type fetchSection struct {
 type partSpecifier int
 
 const (
-	headerPart = iota
+	invalidPart = iota
+	headerPart
 	headerFieldsPart
 	headerFieldsNotPart
 	textPart
