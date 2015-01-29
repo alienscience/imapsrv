@@ -154,9 +154,7 @@ func (p *parser) unknown(tag string, cmd string) command {
 func (p *parser) expectString(lex func() (bool, string)) string {
 	ok, ret := lex()
 	if !ok {
-		msg := fmt.Sprintf("Parser unexpected %q", p.lexer.current())
-		err := parseError(msg)
-		panic(err)
+		parserPanic("Parser unexpected %q", p.lexer.current())
 	}
 
 	return ret
@@ -193,9 +191,7 @@ func (p *parser) expectSequenceSet() []sequenceRange {
 
 	// Check that there is something to return
 	if len(ret) == 0 {
-		msg := fmt.Sprintf("Parser expected sequence set got %q", p.lexer.current())
-		err := parseError(msg)
-		panic(err)
+		parserPanic("Parser expected sequence set got %q", p.lexer.current())
 	}
 
 	return ret
@@ -213,9 +209,7 @@ func (p *parser) expectSequenceNumber() sequenceNumber {
 		ok = p.lexer.sequenceWildcard()
 
 		if !ok {
-			msg := fmt.Sprintf("Parser unexpected %q", p.lexer.current())
-			err := parseError(msg)
-			panic(err)
+			parserPanic("Parser unexpected %q", p.lexer.current())
 		}
 
 		return sequenceNumber{isWildcard: true}
@@ -253,8 +247,7 @@ func (p *parser) expectFetchAttachments(isMultiple bool) []fetchAttachment {
 		} else if att.id == bodyPeekFetchAtt {
 			ok, section := p.section()
 			if !ok {
-				err := parseError("BODY.PEEK must be followed by section")
-				panic(err)
+				parserPanic("BODY.PEEK must be followed by section")
 			}
 			att.section = section
 			att.partial = p.optionalFetchPartial()
@@ -280,8 +273,7 @@ func (p *parser) expectFetchAttachments(isMultiple bool) []fetchAttachment {
 func (p *parser) expectFetchAttachment() fetchAttachmentId {
 	ok, ret := p.lexer.fetchAttachment()
 	if !ok {
-		err := parseError("Expected fetch attachment")
-		panic(err)
+		parserPanic("Expected fetch attachment")
 	}
 
 	return ret
@@ -313,8 +305,7 @@ func (p *parser) section() (bool, *fetchSection) {
 
 	// The section must end with a ]
 	if !p.lexer.rightBracket() {
-		err := parseError("Expected section to end with ']'")
-		panic(err)
+		parserPanic("Expected section to end with ']'")
 	}
 
 	return true, ret
@@ -358,8 +349,7 @@ func (p *parser) optionalFetchPartial() *fetchPartial {
 	ok, n := p.lexer.integer()
 
 	if !ok {
-		err := parseError("Expected number in fetch partial")
-		panic(err)
+		parserPanic("Expected number in fetch partial")
 	}
 
 	ret := &fetchPartial{}
@@ -369,16 +359,14 @@ func (p *parser) optionalFetchPartial() *fetchPartial {
 	ok, nz := p.lexer.nonZeroInteger()
 
 	if !ok {
-		err := parseError("Expected none-zero number in fetch partial")
-		panic(err)
+		parserPanic("Expected none-zero number in fetch partial")
 	}
 
 	ret.toOctet = nz
 
 	// Then a greater than sign
 	if !p.lexer.greaterThan() {
-		err := parseError("Fetch partial should end with '>'")
-		panic(err)
+		parserPanic("Fetch partial should end with '>'")
 	}
 
 	return ret
@@ -404,8 +392,7 @@ func (p *parser) expectSectionPart() []uint32 {
 				p.lexer.pushBack()
 				return ret
 			} else {
-				err := parseError("Expected a non-zero number in section-part")
-				panic(err)
+				parserPanic("Expected a non-zero number in section-part")
 			}
 		}
 
@@ -429,8 +416,7 @@ func (p *parser) expectSectionText(section *fetchSection) {
 
 	// It must be "MIME"
 	if !p.lexer.mime() {
-		err := parseError("Expected section-msgtext or MIME")
-		panic(err)
+		parserPanic("Expected section-msgtext or MIME")
 	}
 
 	section.mime = true
@@ -443,8 +429,7 @@ func (p *parser) expectSectionText(section *fetchSection) {
 func (p *parser) expectHeaderList() []string {
 
 	if !p.lexer.leftParen() {
-		err := parseError("Expected open paren at start of header-list")
-		panic(err)
+		parserPanic("Expected open paren at start of header-list")
 	}
 
 	ret := make([]string, 0, 4)
@@ -454,8 +439,7 @@ func (p *parser) expectHeaderList() []string {
 		ok, headerFieldName := p.lexer.astring()
 
 		if !ok {
-			err := parseError("Expected header-fld-name in header-list")
-			panic(err)
+			parserPanic("Expected header-fld-name in header-list")
 		}
 
 		ret = append(ret, headerFieldName)
@@ -465,4 +449,11 @@ func (p *parser) expectHeaderList() []string {
 			return ret
 		}
 	}
+}
+
+// Report an error
+func parserPanic(format string, a ...interface{}) {
+	msg := fmt.Sprintf(format, a...)
+	err := parseError(msg)
+	panic(err)
 }
