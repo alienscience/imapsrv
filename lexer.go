@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/textproto"
 	"strconv"
-	"log"
 	"strings"
 )
 
@@ -479,7 +478,6 @@ func (l *lexer) nonquoted(name string, exceptions []byte) (bool, string) {
 		return false, ""
 	}
 
-	log.Print("Non quoted: ", string(buffer))
 	return true, string(buffer)
 }
 

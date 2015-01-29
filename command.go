@@ -283,7 +283,15 @@ func (c *fetch) execute(sess *session) *response {
 		return mustAuthenticate(sess, c.tag, "FETCH")
 	}
 
-	log.Print(c)
+	// TODO: remove this debug code
+	log.Print("FETCH ", c.macro, c.sequenceSet)
+	for _, att := range c.attachments {
+		log.Print("  ", att)
+		if att.section != nil {
+			log.Print("    Section:", att.section)
+		}
+	}
+
 	return bad(c.tag, "Not yet implemented")
 }
 
