@@ -126,6 +126,7 @@ func (p *parser) fetch(tag string) command {
 
 	// Get the command arguments
 	// The first argument is always a sequence set
+	p.lexer.skipSpace()
 	ret.sequenceSet = p.expectSequenceSet()
 
 	// The next token can be a fetch macro, a fetch attachment or an open bracket
@@ -133,6 +134,8 @@ func (p *parser) fetch(tag string) command {
 	if ok {
 		ret.macro = macro
 		return ret
+	} else {
+		p.lexer.pushBackToken()
 	}
 
 	isMultiple := p.lexer.leftParen()
@@ -180,6 +183,8 @@ func (p *parser) expectSequenceSet() []sequenceRange {
 		if ok {
 			item.end = p.expectSequenceNumber()
 		}
+
+		ret = append(ret, item)
 
 		// Is there a sequence set delimiter?
 		ok = p.lexer.sequenceDelimiter()
@@ -327,6 +332,7 @@ func (p *parser) sectionMsgText(section *fetchSection) bool {
 	// Some part specifiers are followed by a header-list
 	switch partSpecifier {
 	case headerFieldsPart, headerFieldsNotPart:
+		p.lexer.skipSpace()
 		section.fields = p.expectHeaderList()
 	}
 

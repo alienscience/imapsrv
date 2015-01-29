@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/textproto"
 	"strconv"
+	"log"
+	"strings"
 )
 
 type lexer struct {
@@ -212,12 +214,14 @@ func (l *lexer) fetchMacro() (bool, fetchCommandMacro) {
 	}
 
 	// Convert the word to a fetch macro
-	switch word {
-	case "ALL":
+	lcWord := strings.ToLower(word)
+
+	switch lcWord {
+	case "all":
 		return ok, allFetchMacro
-	case "FULL":
+	case "full":
 		return ok, fullFetchMacro
-	case "FAST":
+	case "fast":
 		return ok, fastFetchMacro
 	default:
 		return false, invalidFetchMacro
@@ -230,32 +234,35 @@ func (l *lexer) fetchAttachment() (bool, fetchAttachmentId) {
 	l.startToken()
 
 	ok, word := l.dottedWord()
+
 	if !ok {
 		return false, invalidFetchAtt
 	}
 
 	// Convert the word to a fetch attachment
-	switch word {
-	case "ENVELOPE":
+	lcWord := strings.ToLower(word)
+
+	switch lcWord {
+	case "envelope":
 		return ok, envelopeFetchAtt
-	case "FLAGS":
+	case "flags":
 		return ok, flagsFetchAtt
-	case "INTERNALDATE":
+	case "internaldate":
 		return ok, internalDateFetchAtt
-	case "RFC822.HEADER":
+	case "rfc822.header":
 		return ok, rfc822HeaderFetchAtt
-	case "RFC822.SIZE":
+	case "rfc822.size":
 		return ok, rfc822SizeFetchAtt
-	case "RFC822.TEXT":
+	case "rfc822.text":
 		return ok, rfc822TextFetchAtt
-	case "BODY":
+	case "body":
 		// The parser will decide if this is BODY followed by section
 		return ok, bodyFetchAtt
-	case "BODYSTRUCTURE":
+	case "bodystructure":
 		return ok, bodyStructureFetchAtt
-	case "UID":
+	case "uid":
 		return ok, uidFetchAtt
-	case "BODY.PEEK":
+	case "body.peek":
 		return ok, bodyPeekFetchAtt
 	default:
 		return false, invalidFetchAtt
@@ -274,14 +281,16 @@ func (l *lexer) partSpecifier() (bool, partSpecifier) {
 	}
 
 	// Convert the word to a part specifier
-	switch word {
-	case "HEADER":
+	lcWord := strings.ToLower(word)
+
+	switch lcWord {
+	case "header":
 		return ok, headerPart
-	case "HEADER.FIELDS":
+	case "header.fields":
 		return ok, headerFieldsPart
-	case "HEADER.FIELDS.NOT":
+	case "header.fields.not":
 		return ok, headerFieldsNotPart
-	case "TEXT":
+	case "text":
 		return ok, textPart
 	default:
 		return false, invalidPart
@@ -470,6 +479,7 @@ func (l *lexer) nonquoted(name string, exceptions []byte) (bool, string) {
 		return false, ""
 	}
 
+	log.Print("Non quoted: ", string(buffer))
 	return true, string(buffer)
 }
 
@@ -524,7 +534,7 @@ func (l *lexer) dottedWord() (bool, string) {
 func (l *lexer) consume() byte {
 
 	// Move to the next byte if possible
-	if l.idx < len(l.line)-1 {
+	if l.idx < len(l.line) {
 		l.idx += 1
 	}
 	return l.current()
@@ -535,7 +545,7 @@ func (l *lexer) consume() byte {
 func (l *lexer) consumeAll() byte {
 
 	// Is there any line left?
-	if l.idx >= len(l.line)-1 {
+	if l.idx >= len(l.line) {
 		l.newLine()
 		return l.current()
 	}
@@ -547,7 +557,7 @@ func (l *lexer) consumeAll() byte {
 
 // Get the current byte
 func (l *lexer) current() byte {
-	if l.idx < len(l.line)-1 {
+	if l.idx < len(l.line) {
 		return l.line[l.idx]
 	}
 

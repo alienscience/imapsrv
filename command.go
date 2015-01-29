@@ -3,6 +3,7 @@ package imapsrv
 import (
 	"fmt"
 	"strings"
+	"log"
 )
 
 // An IMAP command
@@ -282,6 +283,7 @@ func (c *fetch) execute(sess *session) *response {
 		return mustAuthenticate(sess, c.tag, "FETCH")
 	}
 
+	log.Print(c)
 	return bad(c.tag, "Not yet implemented")
 }
 
