@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"log"
+	"math"
 )
 
 // An IMAP command
@@ -197,8 +198,6 @@ type fetchAttachment struct {
 	id      fetchAttachmentId
 	// nil if no fetchSection exists
 	section *fetchSection
-	// nil if no fetchPartial exists
-	partial *fetchPartial
 }
 
 type fetchAttachmentId int
@@ -232,8 +231,9 @@ const (
 type fetchSection struct {
 	section []uint32
 	part    partSpecifier
-	mime    bool
 	fields  []string
+	// nil if no fetchPartial exists
+	partial *fetchPartial
 }
 
 type partSpecifier int
@@ -244,6 +244,7 @@ const (
 	headerFieldsPart
 	headerFieldsNotPart
 	textPart
+	mimePart
 )
 
 // A byte range
@@ -254,16 +255,18 @@ type fetchPartial struct {
 
 // Message sequence number for fetch
 type sequenceNumber struct {
-	value      uint32 // 0 indicates empty sequence number
+	value      uint32
 	isWildcard bool
 }
 
-// Sequence range, end can be emptySequenceNumber to
-// specify a sequence number
+// Sequence range, end can be nil specify a sequence number
 type sequenceRange struct {
-	start sequenceNumber
-	end   sequenceNumber
+	start uint32
+	end   *uint32
 }
+
+// A sequence number value specifing the largest sequence number in use
+const largestSequenceNumber = math.MaxUint32
 
 // Creating a fetch command requires a constructor
 func createFetchCommand(tag string) *fetch {

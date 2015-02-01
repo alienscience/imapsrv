@@ -181,7 +181,8 @@ func (p *parser) expectSequenceSet() []sequenceRange {
 		// Is this a sequence range?
 		ok = p.lexer.sequenceRangeSeparator()
 		if ok {
-			item.end = p.expectSequenceNumber()
+			end := p.expectSequenceNumber()
+			item.end = &end
 		}
 
 		ret = append(ret, item)
@@ -205,7 +206,7 @@ func (p *parser) expectSequenceSet() []sequenceRange {
 // A sequence number or panic
 //
 //    seq-number      = nz-number / "*"
-func (p *parser) expectSequenceNumber() sequenceNumber {
+func (p *parser) expectSequenceNumber() uint32 {
 
 	ok, seqnum := p.lexer.nonZeroInteger()
 
@@ -217,10 +218,10 @@ func (p *parser) expectSequenceNumber() sequenceNumber {
 			parserPanic("Parser unexpected %q", p.lexer.current())
 		}
 
-		return sequenceNumber{isWildcard: true}
+		return largestSequenceNumber
 	}
 
-	return sequenceNumber{value: seqnum}
+	return seqnum
 }
 
 // Expect one or more fetch attachments
@@ -247,7 +248,7 @@ func (p *parser) expectFetchAttachments(isMultiple bool) []fetchAttachment {
 			if ok {
 				att.id = bodySectionFetchAtt
 				att.section = section
-				att.partial = p.optionalFetchPartial()
+				att.section.partial = p.optionalFetchPartial()
 			}
 		} else if att.id == bodyPeekFetchAtt {
 			ok, section := p.section()
@@ -255,7 +256,7 @@ func (p *parser) expectFetchAttachments(isMultiple bool) []fetchAttachment {
 				parserPanic("BODY.PEEK must be followed by section")
 			}
 			att.section = section
-			att.partial = p.optionalFetchPartial()
+			att.section.partial = p.optionalFetchPartial()
 		}
 
 		ret = append(ret, att)
@@ -425,7 +426,7 @@ func (p *parser) expectSectionText(section *fetchSection) {
 		parserPanic("Expected section-msgtext or MIME")
 	}
 
-	section.mime = true
+	section.part = mimePart
 }
 
 // Get a list of header fields
