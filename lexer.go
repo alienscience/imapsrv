@@ -209,7 +209,7 @@ func (l *lexer) fetchMacro() (bool, fetchCommandMacro) {
 
 	ok, word := l.asciiWord()
 	if !ok {
-		return false, invalidFetchMacro
+		return false, noFetchMacro
 	}
 
 	// Convert the word to a fetch macro
@@ -223,7 +223,7 @@ func (l *lexer) fetchMacro() (bool, fetchCommandMacro) {
 	case "fast":
 		return ok, fastFetchMacro
 	default:
-		return false, invalidFetchMacro
+		return false, noFetchMacro
 	}
 }
 

@@ -2,9 +2,9 @@ package imapsrv
 
 import (
 	"fmt"
-	"strings"
 	"log"
 	"math"
+	"strings"
 )
 
 // An IMAP command
@@ -195,7 +195,7 @@ type fetch struct {
 // Fetch attachments
 type fetchAttachment struct {
 	// What to fetch
-	id      fetchAttachmentId
+	id fetchAttachmentId
 	// nil if no fetchSection exists
 	section *fetchSection
 }
@@ -221,7 +221,7 @@ const (
 type fetchCommandMacro int
 
 const (
-	invalidFetchMacro = iota
+	noFetchMacro = iota
 	allFetchMacro
 	fullFetchMacro
 	fastFetchMacro
@@ -272,7 +272,7 @@ const largestSequenceNumber = math.MaxUint32
 func createFetchCommand(tag string) *fetch {
 	return &fetch{
 		tag:         tag,
-		macro:       invalidFetchMacro,
+		macro:       noFetchMacro,
 		sequenceSet: make([]sequenceRange, 0, 4),
 		attachments: make([]fetchAttachment, 0, 4),
 	}
@@ -294,6 +294,9 @@ func (c *fetch) execute(sess *session) *response {
 			log.Print("    Section:", att.section)
 		}
 	}
+
+	// If there is a fetch macro - convert it into fetch attachments
+	c.expandMacro()
 
 	return bad(c.tag, "Not yet implemented")
 }
@@ -375,4 +378,37 @@ func joinMailboxFlags(m *Mailbox) string {
 
 	// Return a joined string
 	return strings.Join(flags, ",")
+}
+
+// Expand a fetch macro into fetch attachments
+func (c *fetch) expandMacro() {
+
+	switch c.macro {
+	case allFetchMacro:
+		atts := []fetchAttachment{
+			fetchAttachment{id: flagsFetchAtt},
+			fetchAttachment{id: internalDateFetchAtt},
+			fetchAttachment{id: rfc822SizeFetchAtt},
+			fetchAttachment{id: envelopeFetchAtt},
+		}
+		c.attachments = atts
+	case fastFetchMacro:
+		atts := []fetchAttachment{
+			fetchAttachment{id: flagsFetchAtt},
+			fetchAttachment{id: internalDateFetchAtt},
+			fetchAttachment{id: rfc822SizeFetchAtt},
+		}
+		c.attachments = atts
+	case fullFetchMacro:
+		atts := []fetchAttachment{
+			fetchAttachment{id: flagsFetchAtt},
+			fetchAttachment{id: internalDateFetchAtt},
+			fetchAttachment{id: rfc822SizeFetchAtt},
+			fetchAttachment{id: envelopeFetchAtt},
+			fetchAttachment{id: bodyFetchAtt},
+		}
+		c.attachments = atts
+	default:
+		// Do no macro expansion
+	}
 }
