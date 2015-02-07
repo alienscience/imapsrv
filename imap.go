@@ -192,7 +192,7 @@ func (c *client) handle() {
 	parser := createParser(c.bufin)
 
 	// Write the welcome message
-	err := ok("*", "IMAP4rev1 Service Ready").write(c.bufout)
+	err := ok("*", "IMAP4rev1 Service Ready").writeTo(c.bufout)
 
 	if err != nil {
 		c.logError(err)
@@ -206,22 +206,41 @@ func (c *client) handle() {
 		// Get the next IMAP command
 		command := parser.next()
 
-		// Execute the IMAP command
-		response := command.execute(sess)
+		// Execute the IMAP command and finish when requested
+		if !c.execute(command, sess) {
+			break
+		}
+	}
+}
 
-		// Write back the response
-		err = response.write(c.bufout)
+// Execute an IMAP command in the given session
+// Returns true if execution can continue, false if not
+func (c *client) execute(cmd command, sess *session) bool {
+	
+	// Create an output channel
+	ch := make(chan response)
+
+	// Execute the command in the background
+	// TODO: support concurrent command execution
+	go cmd.execute(sess, ch)
+
+	ret := true
+
+	// Output the responses
+	for r := range ch {
+		err := r.writeTo(c.bufout)
 
 		if err != nil {
 			c.logError(err)
-			return
 		}
-
+	
 		// Should the connection be closed?
-		if response.closeConnection {
-			return
+		if r.isClose() {
+			ret = false
 		}
 	}
+
+	return ret
 }
 
 // Close an IMAP client

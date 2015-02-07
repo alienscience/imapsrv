@@ -92,7 +92,7 @@ func (s *session) list(reference []string, pattern []string) ([]*Mailbox, error)
 }
 
 // Add mailbox information to the given response
-func (s *session) addMailboxInfo(resp *response) error {
+func (s *session) addMailboxInfo(resp *finalResponse) error {
 	mailstore := s.config.Mailstore
 
 	// Get the mailbox information from the mailstore
@@ -113,11 +113,11 @@ func (s *session) addMailboxInfo(resp *response) error {
 		return err
 	}
 
-	resp.extra(fmt.Sprint(totalMessages, " EXISTS"))
-	resp.extra(fmt.Sprint(recentMessages, " RECENT"))
-	resp.extra(fmt.Sprintf("OK [UNSEEN %d] Message %d is first unseen", firstUnseen, firstUnseen))
-	resp.extra(fmt.Sprintf("OK [UIDVALIDITY %d] UIDs valid", s.mailbox.Id))
-	resp.extra(fmt.Sprintf("OK [UIDNEXT %d] Predicted next UID", nextUid))
+	resp.put(fmt.Sprint(totalMessages, " EXISTS"))
+	resp.put(fmt.Sprint(recentMessages, " RECENT"))
+	resp.put(fmt.Sprintf("OK [UNSEEN %d] Message %d is first unseen", firstUnseen, firstUnseen))
+	resp.put(fmt.Sprintf("OK [UIDVALIDITY %d] UIDs valid", s.mailbox.Id))
+	resp.put(fmt.Sprintf("OK [UIDNEXT %d] Predicted next UID", nextUid))
 	return nil
 }
 

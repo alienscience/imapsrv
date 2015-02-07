@@ -9,8 +9,9 @@ import (
 
 // An IMAP command
 type command interface {
-	// Execute the command and return an imap response
-	execute(s *session) *response
+	// Execute a command and receive imap responses on the given channel
+	// The channel is closed by the imap command when it completes
+	execute(s *session, out chan response)
 }
 
 // Path delimiter
@@ -25,8 +26,9 @@ type noop struct {
 }
 
 // Execute a noop
-func (c *noop) execute(s *session) *response {
-	return ok(c.tag, "NOOP Completed")
+func (c *noop) execute(s *session, out chan response) {
+	defer close(out)
+	out <- ok(c.tag, "NOOP Completed")
 }
 
 //------------------------------------------------------------------------------
@@ -37,11 +39,13 @@ type capability struct {
 }
 
 // Execute a capability
-func (c *capability) execute(s *session) *response {
-	// The IMAP server is assumed to be running over SSL and so
+func (c *capability) execute(s *session, out chan response) {
+	defer close(out)
+
+	// At the moment the IMAP server is assumed to be running over SSL and so
 	// STARTTLS is not supported and LOGIN is not disabled
-	return ok(c.tag, "CAPABILITY completed").
-		extra("CAPABILITY IMAP4rev1")
+	out <- ok(c.tag, "CAPABILITY completed").
+		put("CAPABILITY IMAP4rev1")
 }
 
 //------------------------------------------------------------------------------
@@ -54,23 +58,26 @@ type login struct {
 }
 
 // Login command
-func (c *login) execute(sess *session) *response {
+func (c *login) execute(sess *session, out chan response) {
+	defer close(out)
 
 	// Has the user already logged in?
 	if sess.st != notAuthenticated {
 		message := "LOGIN already logged in"
 		sess.log(message)
-		return bad(c.tag, message)
+		out <- bad(c.tag, message)
+		return
 	}
 
 	// TODO: implement login
 	if c.userId == "test" {
 		sess.st = authenticated
-		return ok(c.tag, "LOGIN completed")
+		out <- ok(c.tag, "LOGIN completed")
+		return
 	}
 
 	// Fail by default
-	return no(c.tag, "LOGIN failure")
+	out <- no(c.tag, "LOGIN failure")
 }
 
 //------------------------------------------------------------------------------
@@ -81,12 +88,13 @@ type logout struct {
 }
 
 // Logout command
-func (c *logout) execute(sess *session) *response {
+func (c *logout) execute(sess *session, out chan response) {
+	defer close(out)
 
 	sess.st = notAuthenticated
-	return ok(c.tag, "LOGOUT completed").
-		extra("BYE IMAP4rev1 Server logging out").
-		shouldClose()
+	out <- ok(c.tag, "LOGOUT completed").
+		shouldClose().
+		put("BYE IMAP4rev1 Server logging out")
 }
 
 //------------------------------------------------------------------------------
@@ -98,11 +106,13 @@ type selectMailbox struct {
 }
 
 // Select command
-func (c *selectMailbox) execute(sess *session) *response {
+func (c *selectMailbox) execute(sess *session, out chan response) {
+	defer close(out)
 
 	// Is the user authenticated?
 	if sess.st != authenticated {
-		return mustAuthenticate(sess, c.tag, "SELECT")
+		out <- mustAuthenticate(sess, c.tag, "SELECT")
+		return
 	}
 
 	// Select the mailbox
@@ -110,11 +120,13 @@ func (c *selectMailbox) execute(sess *session) *response {
 	exists, err := sess.selectMailbox(mbox)
 
 	if err != nil {
-		return internalError(sess, c.tag, "SELECT", err)
+		out <- internalError(sess, c.tag, "SELECT", err)
+		return
 	}
 
 	if !exists {
-		return no(c.tag, "SELECT No such mailbox")
+		out <- no(c.tag, "SELECT No such mailbox")
+		return
 	}
 
 	// Build a response that includes mailbox information
@@ -123,10 +135,11 @@ func (c *selectMailbox) execute(sess *session) *response {
 	err = sess.addMailboxInfo(res)
 
 	if err != nil {
-		return internalError(sess, c.tag, "SELECT", err)
+		out <- internalError(sess, c.tag, "SELECT", err)
+		return
 	}
-
-	return res
+		
+	out <- res
 }
 
 //------------------------------------------------------------------------------
@@ -139,19 +152,22 @@ type list struct {
 }
 
 // List command
-func (c *list) execute(sess *session) *response {
+func (c *list) execute(sess *session, out chan response) {
+	defer close(out)
 
 	// Is the user authenticated?
 	if sess.st != authenticated {
-		return mustAuthenticate(sess, c.tag, "LIST")
+		out <- mustAuthenticate(sess, c.tag, "LIST")
+		return
 	}
 
 	// Is the mailbox pattern empty? This indicates that we should return
 	// the delimiter and the root name of the reference
 	if c.mboxPattern == "" {
 		res := ok(c.tag, "LIST completed")
-		res.extra(fmt.Sprintf(`LIST () "%s" %s`, pathDelimiter, c.reference))
-		return res
+		res.put(fmt.Sprintf(`LIST () "%s" %s`, pathDelimiter, c.reference))
+		out <- res
+		return
 	}
 
 	// Convert the reference and mbox pattern into slices
@@ -162,24 +178,26 @@ func (c *list) execute(sess *session) *response {
 	mboxes, err := sess.list(ref, mbox)
 
 	if err != nil {
-		return internalError(sess, c.tag, "LIST", err)
+		out <- internalError(sess, c.tag, "LIST", err)
+		return
 	}
 
 	// Check for an empty response
 	if len(mboxes) == 0 {
-		return no(c.tag, "LIST no results")
+		out <- no(c.tag, "LIST no results")
+		return
 	}
 
 	// Respond with the mailboxes
 	res := ok(c.tag, "LIST completed")
 	for _, mbox := range mboxes {
-		res.extra(fmt.Sprintf(`LIST (%s) "%s" /%s`,
+		res.put(fmt.Sprintf(`LIST (%s) "%s" /%s`,
 			joinMailboxFlags(mbox),
 			string(pathDelimiter),
 			strings.Join(mbox.Path, string(pathDelimiter))))
 	}
 
-	return res
+	out <- res
 }
 
 //------------------------------------------------------------------------------
@@ -253,19 +271,13 @@ type fetchPartial struct {
 	toOctet   uint32
 }
 
-// Message sequence number for fetch
-type sequenceNumber struct {
-	value      uint32
-	isWildcard bool
-}
-
-// Sequence range, end can be nil specify a sequence number
+// Sequence range, end can be nil to specify a sequence number
 type sequenceRange struct {
 	start uint32
 	end   *uint32
 }
 
-// A sequence number value specifing the largest sequence number in use
+// A sequence number value specifying the largest sequence number in use
 const largestSequenceNumber = math.MaxUint32
 
 // Creating a fetch command requires a constructor
@@ -279,11 +291,13 @@ func createFetchCommand(tag string) *fetch {
 }
 
 // Fetch command
-func (c *fetch) execute(sess *session) *response {
+func (c *fetch) execute(sess *session, out chan response) {
+	defer close(out)
 
 	// Is the user authenticated?
 	if sess.st != authenticated {
-		return mustAuthenticate(sess, c.tag, "FETCH")
+		out <- mustAuthenticate(sess, c.tag, "FETCH")
+		return
 	}
 
 	// TODO: remove this debug code
@@ -298,7 +312,31 @@ func (c *fetch) execute(sess *session) *response {
 	// If there is a fetch macro - convert it into fetch attachments
 	c.expandMacro()
 
-	return bad(c.tag, "Not yet implemented")
+	// Loop through the sequence ranges to fetch
+	for _, seqRange := range c.sequenceSet {
+
+		// Loop through the sequence range
+		i := seqRange.start
+		for {
+			// Execute the fetch command
+			res, err := sess.fetch(i, c.attachments)
+
+			if err != nil {
+				out <- internalError(sess, c.tag, "FETCH", err)
+				return
+			}
+
+			// Output the current fetch
+			out <- partialFetchResponse(res)
+
+			// Is this the last value in the range?
+			if seqRange.end == nil || i > *seqRange.end {
+				break
+			}
+		}
+	}
+
+	out <- ok(c.tag, "FETCH completed")
 }
 
 //------------------------------------------------------------------------------
@@ -310,23 +348,25 @@ type unknown struct {
 }
 
 // Report an error for an unknown command
-func (c *unknown) execute(s *session) *response {
+func (c *unknown) execute(s *session, out chan response) {
+	defer close(out)
+
 	message := fmt.Sprintf("%s unknown command", c.cmd)
 	s.log(message)
-	return bad(c.tag, message)
+	out <- bad(c.tag, message)
 }
 
 //------ Helper functions ------------------------------------------------------
 
 // Log an error and return an response
-func internalError(sess *session, tag string, commandName string, err error) *response {
+func internalError(sess *session, tag string, commandName string, err error) *finalResponse {
 	message := commandName + " " + err.Error()
 	sess.log(message)
 	return no(tag, message).shouldClose()
 }
 
 // Indicate a command is invalid because the user has not authenticated
-func mustAuthenticate(sess *session, tag string, commandName string) *response {
+func mustAuthenticate(sess *session, tag string, commandName string) *finalResponse {
 	message := commandName + " not authenticated"
 	sess.log(message)
 	return bad(tag, message)

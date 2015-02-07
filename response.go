@@ -1,4 +1,3 @@
-
 package imapsrv
 
 import (
@@ -6,75 +5,119 @@ import (
 )
 
 // An IMAP response
-type response struct {
+type response interface {
+	// Put a text line or lines into the response
+	put(s string) response
+	// Output the response
+	writeTo(w *bufio.Writer) error
+	// Should the connection be closed?
+	isClose() bool
+}
+
+// A final response that is sent when a command completes
+type finalResponse struct {
 	// The tag of the command that this is the response for
 	tag string
 	// The machine readable condition
 	condition string
 	// A human readable message
 	message string
-	// Untagged output lines
-	untagged []string
 	// Should the connection be closed after the response has been sent?
 	closeConnection bool
+	// Untagged output
+	partialResponse
 }
 
-// Create a response
-func createResponse(tag string, condition string, message string) *response {
-	return &response{
-		tag:       tag,
-		condition: condition,
-		message:   message,
-		untagged:  make([]string, 0, 4),
+// An partial response that can be sent before a command completes
+type partialResponse struct {
+	entries []string
+}
+
+// Create a final response
+func createFinalResponse(tag string, condition string, message string) *finalResponse {
+	return &finalResponse{
+		tag:             tag,
+		condition:       condition,
+		message:         message,
+		partialResponse: createPartialResponse(),
 	}
 }
 
+// Create a partial response
+func createPartialResponse() partialResponse {
+	return partialResponse{
+		entries: make([]string, 0, 4),
+	}
+}
+
+// Create a pointer to a partial response
+func partial() *partialResponse {
+	ret := createPartialResponse()
+	return &ret
+}
+
 // Create a OK response
-func ok(tag string, message string) *response {
-	return createResponse(tag, "OK", message)
+func ok(tag string, message string) *finalResponse {
+	return createFinalResponse(tag, "OK", message)
 }
 
 // Create an BAD response
-func bad(tag string, message string) *response {
-	return createResponse(tag, "BAD", message)
+func bad(tag string, message string) *finalResponse {
+	return createFinalResponse(tag, "BAD", message)
 }
 
 // Create a NO response
-func no(tag string, message string) *response {
-	return createResponse(tag, "NO", message)
+func no(tag string, message string) *finalResponse {
+	return createFinalResponse(tag, "NO", message)
 }
 
-// Write an untagged fatal response
-func fatalResponse(w *bufio.Writer, err error) {
-	resp := createResponse("*", "BYE", err.Error())
+// Create an untagged fatal response
+func fatalResponse(w *bufio.Writer, err error) *finalResponse {
+	resp := createFinalResponse("*", "BYE", err.Error())
 	resp.closeConnection = true
-	resp.write(w)
+	return resp
 }
 
-// Add an untagged line to a response
-func (r *response) extra(line string) *response {
-	r.untagged = append(r.untagged, line)
+// Add an untagged string to a final response
+func (r *finalResponse) put(s string) response {
+	r.partialResponse.put(s)
+	return r
+}
+
+// Add an untagged string to a partial response
+func (r *partialResponse) put(s string) response {
+	r.entries = append(r.entries, s)
 	return r
 }
 
 // Mark that a response should close the connection
-func (r *response) shouldClose() *response {
+func (r *finalResponse) shouldClose() *finalResponse {
 	r.closeConnection = true
 	return r
 }
 
-// Write a response to the given writer
-func (r *response) write(w *bufio.Writer) error {
+// Should a final response close the connection?
+func (r *finalResponse) isClose() bool {
+	return r.closeConnection
+}
+
+// Should a partial response close the connection?
+func (r *partialResponse) isClose() bool {
+	return false
+}
+
+// Write a final response to the given writer
+func (r *finalResponse) writeTo(w *bufio.Writer) error {
 
 	// Write untagged lines
-	for _, line := range r.untagged {
-		_, err := w.WriteString("* " + line + "\r\n")
-		if err != nil {
-			return err
-		}
+	err := r.partialResponse.writeTo(w)
+
+	if err != nil {
+		return err
 	}
 
-	_, err := w.WriteString(r.tag + " " + r.condition + " " + r.message + "\r\n")
+	_, err = w.WriteString(r.tag + " " + r.condition + " " + r.message + "\r\n")
+
 	if err != nil {
 		return err
 	}
@@ -84,3 +127,16 @@ func (r *response) write(w *bufio.Writer) error {
 	return nil
 }
 
+// Write a partial response to the given writer
+func (r *partialResponse) writeTo(w *bufio.Writer) error {
+
+	// Write untagged lines
+	for _, line := range r.entries {
+		_, err := w.WriteString("* " + line + "\r\n")
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
