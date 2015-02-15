@@ -232,6 +232,7 @@ func (c *client) execute(cmd command, sess *session) bool {
 
 		if err != nil {
 			c.logError(err)
+			ret = false
 		}
 	
 		// Should the connection be closed?

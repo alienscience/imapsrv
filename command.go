@@ -292,8 +292,10 @@ type sequenceRange struct {
 
 // The message data in a FETCH response
 type messageData struct {
+	// Sequence number of the message
 	seqNum uint32
-	fields map[string]string
+	// The message fields which can be strings or embedded maps
+	fields map[string]interface{}
 }
 
 
@@ -483,7 +485,7 @@ func partialFetchResponse(msgData messageData) response {
 	return ret
 }
 
-func putFetchFields(resp response, fields map[string]{}interface) {
+func putFetchFields(resp response, fields map[string]interface{}) {
 
 	resp.put("(")
 
@@ -494,7 +496,7 @@ func putFetchFields(resp response, fields map[string]{}interface) {
 
 		// Handle nested maps
 		switch i := v.(type) {
-		case map[string]string :
+		case map[string]interface{} :
 			putFetchFields(resp, i)
 		case string:
 			resp.put(i)
