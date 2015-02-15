@@ -79,6 +79,7 @@ func fatalResponse(w *bufio.Writer, err error) *finalResponse {
 }
 
 // Add an untagged string to a final response
+// TODO: have putLine and put
 func (r *finalResponse) put(s string) response {
 	r.partialResponse.put(s)
 	return r

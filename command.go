@@ -14,9 +14,22 @@ type command interface {
 	execute(s *session, out chan response)
 }
 
-// Path delimiter
 const (
+	// Imap lets the server choose the path delimiter
 	pathDelimiter = '/'
+	// A sequence number value specifying the largest sequence number in use
+	largestSequenceNumber = math.MaxUint32
+)
+
+// Message flags
+type messageFlag int
+const (
+	answered = iota
+	flagged
+	deleted
+	seen
+	draft
+	recent
 )
 
 //------------------------------------------------------------------------------
@@ -277,8 +290,12 @@ type sequenceRange struct {
 	end   *uint32
 }
 
-// A sequence number value specifying the largest sequence number in use
-const largestSequenceNumber = math.MaxUint32
+// The message data in a FETCH response
+type messageData struct {
+	seqNum uint32
+	fields map[string]string
+}
+
 
 // Creating a fetch command requires a constructor
 func createFetchCommand(tag string) *fetch {
@@ -451,4 +468,40 @@ func (c *fetch) expandMacro() {
 	default:
 		// Do no macro expansion
 	}
+}
+
+// Return a partial response containing the given message data
+func partialFetchResponse(msgData messageData) response {
+
+	// Add the start of the response
+	ret := partial()
+	ret.put(fmt.Sprintf("%d FETCH",msgData.seqNum))
+
+	// Add the fields
+	putFetchFields(ret, msgData.fields)
+
+	return ret
+}
+
+func putFetchFields(resp response, fields map[string]{}interface) {
+
+	resp.put("(")
+
+	// Loop through the fields
+	for k, v  := range fields {
+
+		resp.put(k)
+
+		// Handle nested maps
+		switch i := v.(type) {
+		case map[string]string :
+			putFetchFields(resp, i)
+		case string:
+			resp.put(i)
+		default:
+			panic("Unknown type in message-data")
+		}
+	}
+
+	resp.put(")")
 }
