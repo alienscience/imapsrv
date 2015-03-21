@@ -3,6 +3,7 @@ package imapsrv
 import (
 	"fmt"
 	"log"
+	"github.com/jhillyerd/go.enmime"
 )
 
 // IMAP session states
@@ -90,6 +91,30 @@ func (s *session) list(reference []string, pattern []string) ([]*Mailbox, error)
 	// Recursively get a listing
 	return s.depthFirstMailboxes(ret, path, pattern[wildcard:len(pattern)])
 }
+
+// Fetch a mail message with the given sequence number
+func (s *session) fetch(seqnum uint32, attachments []fetchAttachment) (*messageData, error) {
+
+	// Fetch the message
+	mailbox := s.mailbox
+	msg := mailbox.fetch(seqnum)
+
+	ret := &messageData{
+		seqNum: seqnum,
+		fields: make(map[string]interface{}),
+	}
+
+	// Extract the fetch attachments
+	for _, att := range attachments {
+		err := extractFetchAttachment(ret, msg, att)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return ret, nil
+}
+
 
 // Add mailbox information to the given response
 func (s *session) addMailboxInfo(resp *finalResponse) error {
@@ -184,4 +209,11 @@ func (s *session) depthFirstMailboxes(
 	}
 
 	return ret, err
+}
+
+// Extract a fetch attachment from a message and update the given messageData
+func extractFetchAttachment(dest *messageData, msg enmime.MIMEBody, att fetchAttachment ) error {
+
+	// TODO: implement
+	return nil
 }

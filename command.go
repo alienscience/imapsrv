@@ -349,6 +349,7 @@ func (c *fetch) execute(sess *session, out chan response) {
 			out <- partialFetchResponse(res)
 
 			// Is this the last value in the range?
+			i += 1
 			if seqRange.end == nil || i > *seqRange.end {
 				break
 			}
@@ -473,7 +474,7 @@ func (c *fetch) expandMacro() {
 }
 
 // Return a partial response containing the given message data
-func partialFetchResponse(msgData messageData) response {
+func partialFetchResponse(msgData *messageData) response {
 
 	// Add the start of the response
 	ret := partial()
