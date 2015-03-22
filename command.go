@@ -18,11 +18,12 @@ const (
 	// Imap lets the server choose the path delimiter
 	pathDelimiter = '/'
 	// A sequence number value specifying the largest sequence number in use
-	largestSequenceNumber = math.MaxUint32
+	largestSequenceNumber = math.MaxInt32
 )
 
 // Message flags
 type messageFlag int
+
 const (
 	answered = iota
 	flagged
@@ -151,7 +152,7 @@ func (c *selectMailbox) execute(sess *session, out chan response) {
 		out <- internalError(sess, c.tag, "SELECT", err)
 		return
 	}
-		
+
 	out <- res
 }
 
@@ -207,7 +208,7 @@ func (c *list) execute(sess *session, out chan response) {
 		res.put(fmt.Sprintf(`LIST (%s) "%s" /%s`,
 			joinMailboxFlags(mbox),
 			string(pathDelimiter),
-			strings.Join(mbox.Path, string(pathDelimiter))))
+			strings.Join(mbox.provider.Path(), string(pathDelimiter))))
 	}
 
 	out <- res
@@ -286,18 +287,17 @@ type fetchPartial struct {
 
 // Sequence range, end can be nil to specify a sequence number
 type sequenceRange struct {
-	start uint32
-	end   *uint32
+	start int32
+	end   *int32
 }
 
 // The message data in a FETCH response
 type messageData struct {
 	// Sequence number of the message
-	seqNum uint32
+	seqNum int32
 	// The message fields which can be strings or embedded maps
 	fields map[string]interface{}
 }
-
 
 // Creating a fetch command requires a constructor
 func createFetchCommand(tag string) *fetch {
@@ -425,19 +425,21 @@ func pathToSlice(path string) []string {
 }
 
 // Return a string of mailbox flags for the given mailbox
-func joinMailboxFlags(m *Mailbox) string {
+func joinMailboxFlags(m *mailboxWrap) string {
 
 	// Convert the mailbox flags into a slice of strings
-	flags := make([]string, 0, 4)
+	ret := make([]string, 0, 4)
+
+	flags, _ := m.provider.Flags()
 
 	for flag, str := range mailboxFlags {
-		if m.Flags&flag != 0 {
-			flags = append(flags, str)
+		if flags&flag != 0 {
+			ret = append(ret, str)
 		}
 	}
 
 	// Return a joined string
-	return strings.Join(flags, ",")
+	return strings.Join(ret, ",")
 }
 
 // Expand a fetch macro into fetch attachments
@@ -478,7 +480,7 @@ func partialFetchResponse(msgData *messageData) response {
 
 	// Add the start of the response
 	ret := partial()
-	ret.put(fmt.Sprintf("%d FETCH",msgData.seqNum))
+	ret.put(fmt.Sprintf("%d FETCH", msgData.seqNum))
 
 	// Add the fields
 	putFetchFields(ret, msgData.fields)
@@ -491,13 +493,13 @@ func putFetchFields(resp response, fields map[string]interface{}) {
 	resp.put("(")
 
 	// Loop through the fields
-	for k, v  := range fields {
+	for k, v := range fields {
 
 		resp.put(k)
 
 		// Handle nested maps
 		switch i := v.(type) {
-		case map[string]interface{} :
+		case map[string]interface{}:
 			putFetchFields(resp, i)
 		case string:
 			resp.put(i)

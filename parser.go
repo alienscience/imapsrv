@@ -206,7 +206,7 @@ func (p *parser) expectSequenceSet() []sequenceRange {
 // A sequence number or panic
 //
 //    seq-number      = nz-number / "*"
-func (p *parser) expectSequenceNumber() uint32 {
+func (p *parser) expectSequenceNumber() int32 {
 
 	ok, seqnum := p.lexer.nonZeroInteger()
 
@@ -221,7 +221,7 @@ func (p *parser) expectSequenceNumber() uint32 {
 		return largestSequenceNumber
 	}
 
-	return seqnum
+	return int32(seqnum)
 }
 
 // Expect one or more fetch attachments
