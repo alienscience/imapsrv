@@ -224,6 +224,39 @@ func (s *session) depthFirstMailboxes(
 // Extract a fetch attachment from a message and update the given messageData
 func extractFetchAttachment(dest *messageData, msg *enmime.MIMEBody, att fetchAttachment) error {
 
+	root := msg.Root
+
+	switch att {
+	case envelopeFetchAtt:
+		// Add header fields
+		header := root.Header()
+		env := fmt.Print(
+			"(", header["Date"], " ",
+			header["Subject"], " ",
+			header["From"], " ",
+			header["Sender"], " ",
+			header["Reply-To"], " ",
+			header["To"], " ",
+			header["Cc"], " ",
+			header["Bcc"], " ",
+			header["Bcc"], " ",
+			header["In-Reply-To"], " ",
+			header["Message-ID"], ")")
+		dest["ENVELOPE"] = env
+	case flagsFetchAtt:
+	case internalDateFetchAtt:
+	case rfc822HeaderFetchAtt:
+	case rfc822SizeFetchAtt:
+	case rfc822TextFetchAtt:
+	case bodyFetchAtt:
+	case bodyStructureFetchAtt:
+	case uidFetchAtt:
+	case bodySectionFetchAtt:
+	case bodyPeekFetchAtt:
+	default:
+		// Unknown fetch attachment
+	}
+
 	// TODO: implement
 	return nil
 }
