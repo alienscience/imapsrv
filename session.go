@@ -2,8 +2,8 @@ package imapsrv
 
 import (
 	"fmt"
-	"github.com/jhillyerd/go.enmime"
 	"log"
+	"strings"
 )
 
 // IMAP session states
@@ -109,7 +109,7 @@ func (s *session) fetch(seqnum int32, attachments []fetchAttachment) (*messageDa
 
 	// Extract the fetch attachments
 	for _, att := range attachments {
-		err := extractFetchAttachment(ret, msg, att)
+		err := extractFetchAttachment(ret, msg, att.id)
 		if err != nil {
 			return nil, err
 		}
@@ -222,16 +222,37 @@ func (s *session) depthFirstMailboxes(
 }
 
 // Extract a fetch attachment from a message and update the given messageData
-func extractFetchAttachment(dest *messageData, msg *enmime.MIMEBody, att fetchAttachment) error {
+func extractFetchAttachment(dest *messageData, msg *messageWrap, att fetchAttachmentId) error {
 
-	root := msg.Root
+	// Attachments that do not require message parsing
+	switch att {
+	case flagsFetchAtt:
+		flags, err := msg.provider.Flags()
+		if err != nil {
+			return err
+		}
+
+		// Convert flags to strings
+		dest.fields["FLAGS"] = fmt.Sprint("(",
+			joinMessageFlags(flags),
+			")")
+		return nil
+	}
+
+	// If this point is reached the message must be parsed
+	mime, err := msg.parse()
+	if err != nil {
+		return err
+	}
+
+	root := mime.Root
 
 	switch att {
 	case envelopeFetchAtt:
 		// Add header fields
 		header := root.Header()
-		env := fmt.Print(
-			"(", header["Date"], " ",
+		env := fmt.Sprint("(",
+			header["Date"], " ",
 			header["Subject"], " ",
 			header["From"], " ",
 			header["Sender"], " ",
@@ -241,11 +262,15 @@ func extractFetchAttachment(dest *messageData, msg *enmime.MIMEBody, att fetchAt
 			header["Bcc"], " ",
 			header["Bcc"], " ",
 			header["In-Reply-To"], " ",
-			header["Message-ID"], ")")
-		dest["ENVELOPE"] = env
-	case flagsFetchAtt:
+			header["Message-ID"],
+			")")
+		dest.fields["ENVELOPE"] = env
 	case internalDateFetchAtt:
+		dest.fields["INTERNALDATE"] = msg.internalDate()
 	case rfc822HeaderFetchAtt:
+		// TODO: handle creation of large responses
+		// See for an example:
+		// https://lists.kolab.org/pipermail/users/2006-May/004955.html
 	case rfc822SizeFetchAtt:
 	case rfc822TextFetchAtt:
 	case bodyFetchAtt:
@@ -254,9 +279,24 @@ func extractFetchAttachment(dest *messageData, msg *enmime.MIMEBody, att fetchAt
 	case bodySectionFetchAtt:
 	case bodyPeekFetchAtt:
 	default:
-		// Unknown fetch attachment
+		// Unknown fetch attachment - ignore
 	}
 
-	// TODO: implement
 	return nil
+}
+
+// Return a string of message flags
+func joinMessageFlags(flags uint8) string {
+
+	// Convert the mailbox flags into a slice of strings
+	ret := make([]string, 0, 4)
+
+	for flag, str := range messageFlags {
+		if flags&flag != 0 {
+			ret = append(ret, str)
+		}
+	}
+
+	// Return a joined string
+	return strings.Join(ret, " ")
 }

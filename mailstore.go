@@ -2,6 +2,7 @@ package imapsrv
 
 import (
 	"io"
+	"time"
 )
 
 // A service that is needed to read mail messages
@@ -33,7 +34,7 @@ type Mailbox interface {
 	// Get the total number of unread messages
 	RecentMessages() (int32, error)
 	// Fetch the message with the given UID
-	Fetch(uid int32) (io.ReadSeeker, error)
+	Fetch(uid int32) (Message, error)
 }
 
 // Mailbox flags
@@ -53,6 +54,32 @@ const (
 	Unmarked
 )
 
+// An IMAP message
+type Message interface {
+	// Get the message flags
+	Flags() (uint8, error)
+	// Get the date of the message as known by the server
+	InternalDate() time.Time
+	// Get a reader to access the message content
+	Reader() (io.ReadSeeker, error)
+}
+
+// Message flags
+const (
+	// The message has been read
+	Seen = 1 << iota
+	// The message has been answered
+	Answered
+	// The message has been flagged for urgent/special attention
+	Flagged
+	// The message has been marked for removal by EXPUNGE
+	Deleted
+	// The message is imcomplete and is being worked on
+	Draft
+	// The message has recently arrived in the mailbox
+	Recent
+)
+
 var mailboxFlags = map[uint8]string{
 	Noinferiors: "Noinferiors",
 	Noselect:    "Noselect",
@@ -60,3 +87,11 @@ var mailboxFlags = map[uint8]string{
 	Unmarked:    "Unmarked",
 }
 
+var messageFlags = map[uint8]string{
+	Seen:     `\Seen`,
+	Answered: `\Answered`,
+	Flagged:  `\Flagged`,
+	Deleted:  `\Deleted`,
+	Draft:    `\Draft`,
+	Recent:   `\Recent`,
+}
