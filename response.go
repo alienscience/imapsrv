@@ -2,12 +2,22 @@ package imapsrv
 
 import (
 	"bufio"
+	"bytes"
+	"fmt"
 )
+
+// Anything longer than this is considered long and MIGHT be split
+// into a literal
+const longLineLength = 80
 
 // An IMAP response
 type response interface {
-	// Put a text line or lines into the response
+	// Put a string into the response (no newline)
 	put(s string) response
+	// Put a text line or lines into the response
+	putLine(s string) response
+	// Put a field into the response (no newline)
+	putField(name string, value string) response
 	// Output the response
 	writeTo(w *bufio.Writer) error
 	// Should the connection be closed?
@@ -30,6 +40,11 @@ type finalResponse struct {
 
 // An partial response that can be sent before a command completes
 type partialResponse struct {
+	// The current entry being built
+	current *bytes.Buffer
+	// Was the last call a putField?
+	fields bool
+	// The previous entries
 	entries []string
 }
 
@@ -78,16 +93,71 @@ func fatalResponse(w *bufio.Writer, err error) *finalResponse {
 	return resp
 }
 
-// Add an untagged string to a final response
-// TODO: have putLine and put
+// Add a string to a final response
 func (r *finalResponse) put(s string) response {
 	r.partialResponse.put(s)
 	return r
 }
 
-// Add an untagged string to a partial response
+// Add an untagged string to a final response
+func (r *finalResponse) putLine(s string) response {
+	r.partialResponse.putLine(s)
+	return r
+}
+
+// Add a field to a final response
+func (r *finalResponse) putField(name string, value string) response {
+	r.partialResponse.putField(name, value)
+	return r
+}
+
+// Add a string to a partial response
 func (r *partialResponse) put(s string) response {
-	r.entries = append(r.entries, s)
+
+	// Add the string to the current entry
+	if r.current.Len() == 0 {
+		r.current = bytes.NewBufferString(s)
+	} else {
+		r.current.WriteString(s)
+	}
+
+	r.fields = false
+	return r
+}
+
+// Add an untagged line to a partial response
+func (r *partialResponse) putLine(s string) response {
+	if r.current.Len() > 0 {
+		r.entries = append(r.entries, r.current.String())
+	}
+	r.current = bytes.NewBufferString(s)
+	r.fields = false
+	return r
+}
+
+// Add a field to a partial response
+func (r *partialResponse) putField(name string, value string) response {
+
+	// Add the field name to the current entry
+	if r.current.Len() == 0 {
+		r.current = bytes.NewBufferString(name)
+	} else {
+		// Fields are space separated if written together
+		if r.fields {
+			r.current.WriteString(" ")
+		}
+		r.current.WriteString(name)
+	}
+
+	// Is this a long field value?
+	if len(value) > longLineLength {
+		appendLiteral(r.current, value)
+	} else {
+		r.current.WriteString(" ")
+		r.current.WriteString(value)
+	}
+
+	r.fields = true
 	return r
 }
 
@@ -133,10 +203,52 @@ func (r *partialResponse) writeTo(w *bufio.Writer) error {
 
 	// Write untagged lines
 	for _, line := range r.entries {
-		_, err := w.WriteString("* " + line + "\r\n")
+		err := writeLine(w, line)
 		if err != nil {
 			return err
 		}
+	}
+
+	// Write last line
+	if r.current.Len() > 0 {
+		err := writeLine(w, r.current.String())
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+//---- Helper functions --------------------------------------------------------
+
+// Append a string to a buffer as a literal
+func appendLiteral(b *bytes.Buffer, s string) {
+
+	// Append the string length
+	b.WriteString(fmt.Sprint("{", len(s), "}\r\n"))
+
+	// Append the literal
+	b.WriteString(s)
+
+	// Append the cr/nl
+	b.WriteString("\r\n")
+}
+
+// Write a line of partial response
+func writeLine(w *bufio.Writer, s string) error {
+
+	_, err := w.WriteString("* ")
+	if err != nil {
+		return err
+	}
+	_, err = w.WriteString(s)
+	if err != nil {
+		return err
+	}
+	_, err = w.WriteString("\r\n")
+	if err != nil {
+		return err
 	}
 
 	return nil

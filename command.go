@@ -59,7 +59,7 @@ func (c *capability) execute(s *session, out chan response) {
 	// At the moment the IMAP server is assumed to be running over SSL and so
 	// STARTTLS is not supported and LOGIN is not disabled
 	out <- ok(c.tag, "CAPABILITY completed").
-		put("CAPABILITY IMAP4rev1")
+		putLine("CAPABILITY IMAP4rev1")
 }
 
 //------------------------------------------------------------------------------
@@ -108,7 +108,7 @@ func (c *logout) execute(sess *session, out chan response) {
 	sess.st = notAuthenticated
 	out <- ok(c.tag, "LOGOUT completed").
 		shouldClose().
-		put("BYE IMAP4rev1 Server logging out")
+		putLine("BYE IMAP4rev1 Server logging out")
 }
 
 //------------------------------------------------------------------------------
@@ -179,7 +179,7 @@ func (c *list) execute(sess *session, out chan response) {
 	// the delimiter and the root name of the reference
 	if c.mboxPattern == "" {
 		res := ok(c.tag, "LIST completed")
-		res.put(fmt.Sprintf(`LIST () "%s" %s`, pathDelimiter, c.reference))
+		res.putLine(fmt.Sprintf(`LIST () "%s" %s`, pathDelimiter, c.reference))
 		out <- res
 		return
 	}
@@ -205,7 +205,7 @@ func (c *list) execute(sess *session, out chan response) {
 	// Respond with the mailboxes
 	res := ok(c.tag, "LIST completed")
 	for _, mbox := range mboxes {
-		res.put(fmt.Sprintf(`LIST (%s) "%s" /%s`,
+		res.putLine(fmt.Sprintf(`LIST (%s) "%s" /%s`,
 			joinMailboxFlags(mbox),
 			string(pathDelimiter),
 			strings.Join(mbox.provider.Path(), string(pathDelimiter))))
@@ -337,8 +337,12 @@ func (c *fetch) execute(sess *session, out chan response) {
 		// Loop through the sequence range
 		i := seqRange.start
 		for {
+			// Add the start of the response
+			resp := partial()
+			resp.put(fmt.Sprint(i, " FETCH"))
+
 			// Execute the fetch command
-			res, err := sess.fetch(i, c.attachments)
+			err := sess.fetch(resp, i, c.attachments)
 
 			if err != nil {
 				out <- internalError(sess, c.tag, "FETCH", err)
@@ -346,7 +350,7 @@ func (c *fetch) execute(sess *session, out chan response) {
 			}
 
 			// Output the current fetch
-			out <- partialFetchResponse(res)
+			out <- resp
 
 			// Is this the last value in the range?
 			i += 1
@@ -473,40 +477,4 @@ func (c *fetch) expandMacro() {
 	default:
 		// Do no macro expansion
 	}
-}
-
-// Return a partial response containing the given message data
-func partialFetchResponse(msgData *messageData) response {
-
-	// Add the start of the response
-	ret := partial()
-	ret.put(fmt.Sprintf("%d FETCH", msgData.seqNum))
-
-	// Add the fields
-	putFetchFields(ret, msgData.fields)
-
-	return ret
-}
-
-func putFetchFields(resp response, fields map[string]interface{}) {
-
-	resp.put("(")
-
-	// Loop through the fields
-	for k, v := range fields {
-
-		resp.put(k)
-
-		// Handle nested maps
-		switch i := v.(type) {
-		case map[string]interface{}:
-			putFetchFields(resp, i)
-		case string:
-			resp.put(i)
-		default:
-			panic("Unknown type in message-data")
-		}
-	}
-
-	resp.put(")")
 }

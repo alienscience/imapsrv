@@ -93,29 +93,27 @@ func (s *session) list(reference []string, pattern []string) ([]*mailboxWrap, er
 }
 
 // Fetch a mail message with the given sequence number
-func (s *session) fetch(seqnum int32, attachments []fetchAttachment) (*messageData, error) {
+func (s *session) fetch(
+	resp *partialResponse,
+	seqnum int32,
+	attachments []fetchAttachment) error {
 
 	// Fetch the message
 	mailbox := s.mailbox
 	msg, err := mailbox.fetch(seqnum)
 	if err != nil {
-		return nil, err
-	}
-
-	ret := &messageData{
-		seqNum: seqnum,
-		fields: make(map[string]interface{}),
+		return err
 	}
 
 	// Extract the fetch attachments
 	for _, att := range attachments {
-		err := extractFetchAttachment(ret, msg, att.id)
+		err := extractFetchAttachment(resp, msg, att.id)
 		if err != nil {
-			return nil, err
+			return err
 		}
 	}
 
-	return ret, nil
+	return nil
 }
 
 // Add mailbox information to the given response
@@ -222,7 +220,7 @@ func (s *session) depthFirstMailboxes(
 }
 
 // Extract a fetch attachment from a message and update the given messageData
-func extractFetchAttachment(dest *messageData, msg *messageWrap, att fetchAttachmentId) error {
+func extractFetchAttachment(resp response, msg *messageWrap, att fetchAttachmentId) error {
 
 	// Attachments that do not require message parsing
 	switch att {
@@ -233,9 +231,7 @@ func extractFetchAttachment(dest *messageData, msg *messageWrap, att fetchAttach
 		}
 
 		// Convert flags to strings
-		dest.fields["FLAGS"] = fmt.Sprint("(",
-			joinMessageFlags(flags),
-			")")
+		resp.putField("FLAGS", "("+joinMessageFlags(flags)+")")
 		return nil
 	}
 
@@ -251,7 +247,8 @@ func extractFetchAttachment(dest *messageData, msg *messageWrap, att fetchAttach
 	case envelopeFetchAtt:
 		// Add header fields
 		header := root.Header()
-		env := fmt.Sprint("(",
+		env := fmt.Sprint(
+			"(",
 			header["Date"], " ",
 			header["Subject"], " ",
 			header["From"], " ",
@@ -264,11 +261,10 @@ func extractFetchAttachment(dest *messageData, msg *messageWrap, att fetchAttach
 			header["In-Reply-To"], " ",
 			header["Message-ID"],
 			")")
-		dest.fields["ENVELOPE"] = env
+		resp.putField("ENVELOPE", env)
 	case internalDateFetchAtt:
-		dest.fields["INTERNALDATE"] = msg.internalDate()
+		resp.putField("INTERNALDATE", msg.internalDate())
 	case rfc822HeaderFetchAtt:
-		// TODO: handle creation of large responses
 		// See for an example:
 		// https://lists.kolab.org/pipermail/users/2006-May/004955.html
 	case rfc822SizeFetchAtt:
