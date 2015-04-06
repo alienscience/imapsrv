@@ -1,6 +1,8 @@
 package imapsrv
 
 import (
+	"bufio"
+	"bytes"
 	"github.com/jhillyerd/go.enmime"
 	"net/mail"
 )
@@ -108,6 +110,7 @@ func (m *messageWrap) parse() (*enmime.MIMEBody, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer reader.Close()
 
 	// For now read the whole message into memory
 	msg, err := mail.ReadMessage(reader)
@@ -123,8 +126,47 @@ func (m *messageWrap) parse() (*enmime.MIMEBody, error) {
 	return ret, nil
 }
 
+// Get the raw header from a message
+func (m *messageWrap) rfc822Header() (string, error) {
+
+	reader, err := m.provider.Reader()
+	if err != nil {
+		return "", err
+	}
+	defer reader.Close()
+
+	// Read the message line by line
+	buf := new(bytes.Buffer)
+	bufReader := bufio.NewReader(reader)
+
+	for {
+		line, err := bufReader.ReadBytes('\n')
+		if err != nil {
+			return "", err
+		}
+
+		// Is this the \r\n that signifies the end of the header?
+		if len(line) == 2 {
+			break
+		}
+
+		buf.Write(line)
+	}
+
+	return buf.String(), nil
+}
+
+// Get the size of a message
+func (m *messageWrap) size() (uint32, error) {
+	return m.provider.Size()
+}
+
 // Get a formatted internal date from a mail message wrapper
-func (m *messageWrap) internalDate() string {
-	date := m.provider.InternalDate()
-	return date.Format(dateFormat)
+func (m *messageWrap) internalDate() (string, error) {
+	date, err := m.provider.InternalDate()
+	if err != nil {
+		return "", err
+	}
+
+	return date.Format(dateFormat), nil
 }

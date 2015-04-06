@@ -220,6 +220,7 @@ func (s *session) depthFirstMailboxes(
 }
 
 // Extract a fetch attachment from a message and update the given messageData
+// TODO: handle sections
 func extractFetchAttachment(resp response, msg *messageWrap, att fetchAttachmentId) error {
 
 	// Attachments that do not require message parsing
@@ -233,6 +234,25 @@ func extractFetchAttachment(resp response, msg *messageWrap, att fetchAttachment
 		// Convert flags to strings
 		resp.putField("FLAGS", "("+joinMessageFlags(flags)+")")
 		return nil
+	case rfc822HeaderFetchAtt:
+		// Get the raw header
+		hdr, err := msg.rfc822Header()
+		if err != nil {
+			return err
+		}
+		resp.putField("RFC822.HEADER", hdr)
+	case internalDateFetchAtt:
+		date, err := msg.internalDate()
+		if err != nil {
+			return err
+		}
+		resp.putField("INTERNALDATE", date)
+	case rfc822SizeFetchAtt:
+		size, err := msg.size()
+		if err != nil {
+			return err
+		}
+		resp.putField("RFC822.SIZE", fmt.Sprint(size))
 	}
 
 	// If this point is reached the message must be parsed
@@ -262,13 +282,8 @@ func extractFetchAttachment(resp response, msg *messageWrap, att fetchAttachment
 			header["Message-ID"],
 			")")
 		resp.putField("ENVELOPE", env)
-	case internalDateFetchAtt:
-		resp.putField("INTERNALDATE", msg.internalDate())
-	case rfc822HeaderFetchAtt:
-		// See for an example:
-		// https://lists.kolab.org/pipermail/users/2006-May/004955.html
-	case rfc822SizeFetchAtt:
 	case rfc822TextFetchAtt:
+		// Like BODY[TEXT]
 	case bodyFetchAtt:
 	case bodyStructureFetchAtt:
 	case uidFetchAtt:

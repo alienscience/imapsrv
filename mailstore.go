@@ -54,14 +54,23 @@ const (
 	Unmarked
 )
 
+// A message is read through this interface
+type MessageReader interface {
+	io.Reader
+	io.Seeker
+	io.Closer
+}
+
 // An IMAP message
 type Message interface {
 	// Get the message flags
 	Flags() (uint8, error)
 	// Get the date of the message as known by the server
-	InternalDate() time.Time
+	InternalDate() (time.Time, error)
+	// Get the size of the message in bytes
+	Size() (uint32, error)
 	// Get a reader to access the message content
-	Reader() (io.ReadSeeker, error)
+	Reader() (MessageReader, error)
 }
 
 // Message flags
