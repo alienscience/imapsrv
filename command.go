@@ -2,7 +2,6 @@ package imapsrv
 
 import (
 	"fmt"
-	"log"
 	"math"
 	"strings"
 )
@@ -224,31 +223,6 @@ type fetch struct {
 	attachments []fetchAttachment
 }
 
-// Fetch attachments
-type fetchAttachment struct {
-	// What to fetch
-	id fetchAttachmentId
-	// nil if no fetchSection exists
-	section *fetchSection
-}
-
-type fetchAttachmentId int
-
-const (
-	invalidFetchAtt = iota
-	envelopeFetchAtt
-	flagsFetchAtt
-	internalDateFetchAtt
-	rfc822HeaderFetchAtt
-	rfc822SizeFetchAtt
-	rfc822TextFetchAtt
-	bodyFetchAtt
-	bodyStructureFetchAtt
-	uidFetchAtt
-	bodySectionFetchAtt
-	bodyPeekFetchAtt
-)
-
 // Fetch macros
 type fetchCommandMacro int
 
@@ -259,44 +233,10 @@ const (
 	fastFetchMacro
 )
 
-// The section of fetch attachment
-type fetchSection struct {
-	section []uint32
-	part    partSpecifier
-	fields  []string
-	// nil if no fetchPartial exists
-	partial *fetchPartial
-}
-
-type partSpecifier int
-
-const (
-	invalidPart = iota
-	headerPart
-	headerFieldsPart
-	headerFieldsNotPart
-	textPart
-	mimePart
-)
-
-// A byte range
-type fetchPartial struct {
-	fromOctet int32
-	toOctet   uint32
-}
-
 // Sequence range, end can be nil to specify a sequence number
 type sequenceRange struct {
 	start int32
 	end   *int32
-}
-
-// The message data in a FETCH response
-type messageData struct {
-	// Sequence number of the message
-	seqNum int32
-	// The message fields which can be strings or embedded maps
-	fields map[string]interface{}
 }
 
 // Creating a fetch command requires a constructor
@@ -317,15 +257,6 @@ func (c *fetch) execute(sess *session, out chan response) {
 	if sess.st != authenticated {
 		out <- mustAuthenticate(sess, c.tag, "FETCH")
 		return
-	}
-
-	// TODO: remove this debug code
-	log.Print("FETCH ", c.macro, c.sequenceSet)
-	for _, att := range c.attachments {
-		log.Print("  ", att)
-		if att.section != nil {
-			log.Print("    Section:", att.section)
-		}
 	}
 
 	// If there is a fetch macro - convert it into fetch attachments
@@ -452,26 +383,26 @@ func (c *fetch) expandMacro() {
 	switch c.macro {
 	case allFetchMacro:
 		atts := []fetchAttachment{
-			fetchAttachment{id: flagsFetchAtt},
-			fetchAttachment{id: internalDateFetchAtt},
-			fetchAttachment{id: rfc822SizeFetchAtt},
-			fetchAttachment{id: envelopeFetchAtt},
+			&flagsFetchAtt{},
+			&internalDateFetchAtt{},
+			&rfc822SizeFetchAtt{},
+			&envelopeFetchAtt{},
 		}
 		c.attachments = atts
 	case fastFetchMacro:
 		atts := []fetchAttachment{
-			fetchAttachment{id: flagsFetchAtt},
-			fetchAttachment{id: internalDateFetchAtt},
-			fetchAttachment{id: rfc822SizeFetchAtt},
+			&flagsFetchAtt{},
+			&internalDateFetchAtt{},
+			&rfc822SizeFetchAtt{},
 		}
 		c.attachments = atts
 	case fullFetchMacro:
 		atts := []fetchAttachment{
-			fetchAttachment{id: flagsFetchAtt},
-			fetchAttachment{id: internalDateFetchAtt},
-			fetchAttachment{id: rfc822SizeFetchAtt},
-			fetchAttachment{id: envelopeFetchAtt},
-			fetchAttachment{id: bodyFetchAtt},
+			&flagsFetchAtt{},
+			&internalDateFetchAtt{},
+			&rfc822SizeFetchAtt{},
+			&envelopeFetchAtt{},
+			&bodyFetchAtt{},
 		}
 		c.attachments = atts
 	default:

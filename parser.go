@@ -232,34 +232,43 @@ func (p *parser) expectFetchAttachments(isMultiple bool) []fetchAttachment {
 	ret := make([]fetchAttachment, 0, 4)
 
 	for {
-		att := fetchAttachment{}
-
 		// Check for closing parenthesis
 		if isMultiple && p.lexer.rightParen() {
 			return ret
 		}
 
 		// Get the fetch attachment
-		att.id = p.expectFetchAttachment()
+		att := p.expectFetchAttachment()
 
-		// Some fetch attachments have arguments
-		if att.id == bodyFetchAtt {
+		// Some fetch attachments have section arguments
+		switch attStruct := att.(type) {
+		case *bodyFetchAtt:
+			// Optional section argument
 			ok, section := p.section()
 			if ok {
-				att.id = bodySectionFetchAtt
-				att.section = section
-				att.section.partial = p.optionalFetchPartial()
+				// Change the type of fetch attachment to
+				// include a section
+				sectionAtt := &bodySectionFetchAtt{
+					fetchSection: *section,
+				}
+				sectionAtt.fetchSection.partial = p.optionalFetchPartial()
+				ret = append(ret, sectionAtt)
+			} else {
+				ret = append(ret, att)
 			}
-		} else if att.id == bodyPeekFetchAtt {
+		case *bodyPeekFetchAtt:
+			// Mandatory section argument
 			ok, section := p.section()
 			if !ok {
 				parserPanic("BODY.PEEK must be followed by section")
 			}
-			att.section = section
-			att.section.partial = p.optionalFetchPartial()
+			attStruct.fetchSection = *section
+			attStruct.fetchSection.partial = p.optionalFetchPartial()
+			ret = append(ret, attStruct)
+		default:
+			// No section arguments
+			ret = append(ret, att)
 		}
-
-		ret = append(ret, att)
 
 		// Is there only one fetch attachment?
 		if !isMultiple {
@@ -276,7 +285,7 @@ func (p *parser) expectFetchAttachments(isMultiple bool) []fetchAttachment {
 //                      "BODY" ["STRUCTURE"] / "UID" /
 //                      "BODY"
 //                      "BODY.PEEK"
-func (p *parser) expectFetchAttachment() fetchAttachmentId {
+func (p *parser) expectFetchAttachment() fetchAttachment {
 	ok, ret := p.lexer.fetchAttachment()
 	if !ok {
 		parserPanic("Expected fetch attachment")

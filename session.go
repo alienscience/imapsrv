@@ -3,7 +3,6 @@ package imapsrv
 import (
 	"fmt"
 	"log"
-	"strings"
 )
 
 // IMAP session states
@@ -107,7 +106,7 @@ func (s *session) fetch(
 
 	// Extract the fetch attachments
 	for _, att := range attachments {
-		err := extractFetchAttachment(resp, msg, att.id)
+		err := att.extract(resp, msg)
 		if err != nil {
 			return err
 		}
@@ -115,6 +114,8 @@ func (s *session) fetch(
 
 	return nil
 }
+
+//---- Helper functions --------------------------------------------------------
 
 // Add mailbox information to the given response
 func (s *session) addMailboxInfo(resp *finalResponse) error {
@@ -219,95 +220,5 @@ func (s *session) depthFirstMailboxes(
 	return ret, err
 }
 
-// Extract a fetch attachment from a message and update the given messageData
-// TODO: handle sections
-func extractFetchAttachment(resp response, msg *messageWrap, att fetchAttachmentId) error {
 
-	// Attachments that do not require message parsing
-	switch att {
-	case flagsFetchAtt:
-		flags, err := msg.provider.Flags()
-		if err != nil {
-			return err
-		}
 
-		// Convert flags to strings
-		resp.putField("FLAGS", "("+joinMessageFlags(flags)+")")
-		return nil
-	case rfc822HeaderFetchAtt:
-		// Get the raw header
-		hdr, err := msg.rfc822Header()
-		if err != nil {
-			return err
-		}
-		resp.putField("RFC822.HEADER", hdr)
-	case internalDateFetchAtt:
-		date, err := msg.internalDate()
-		if err != nil {
-			return err
-		}
-		resp.putField("INTERNALDATE", date)
-	case rfc822SizeFetchAtt:
-		size, err := msg.size()
-		if err != nil {
-			return err
-		}
-		resp.putField("RFC822.SIZE", fmt.Sprint(size))
-	}
-
-	// If this point is reached the message must be parsed
-	mime, err := msg.parse()
-	if err != nil {
-		return err
-	}
-
-	root := mime.Root
-
-	switch att {
-	case envelopeFetchAtt:
-		// Add header fields
-		header := root.Header()
-		env := fmt.Sprint(
-			"(",
-			header["Date"], " ",
-			header["Subject"], " ",
-			header["From"], " ",
-			header["Sender"], " ",
-			header["Reply-To"], " ",
-			header["To"], " ",
-			header["Cc"], " ",
-			header["Bcc"], " ",
-			header["Bcc"], " ",
-			header["In-Reply-To"], " ",
-			header["Message-ID"],
-			")")
-		resp.putField("ENVELOPE", env)
-	case rfc822TextFetchAtt:
-		// Like BODY[TEXT]
-	case bodyFetchAtt:
-	case bodyStructureFetchAtt:
-	case uidFetchAtt:
-	case bodySectionFetchAtt:
-	case bodyPeekFetchAtt:
-	default:
-		// Unknown fetch attachment - ignore
-	}
-
-	return nil
-}
-
-// Return a string of message flags
-func joinMessageFlags(flags uint8) string {
-
-	// Convert the mailbox flags into a slice of strings
-	ret := make([]string, 0, 4)
-
-	for flag, str := range messageFlags {
-		if flags&flag != 0 {
-			ret = append(ret, str)
-		}
-	}
-
-	// Return a joined string
-	return strings.Join(ret, " ")
-}

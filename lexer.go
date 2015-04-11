@@ -228,14 +228,14 @@ func (l *lexer) fetchMacro() (bool, fetchCommandMacro) {
 }
 
 // A fetch attachment
-func (l *lexer) fetchAttachment() (bool, fetchAttachmentId) {
+func (l *lexer) fetchAttachment() (bool, fetchAttachment) {
 	l.skipSpace()
 	l.startToken()
 
 	ok, word := l.dottedWord()
 
 	if !ok {
-		return false, invalidFetchAtt
+		return false, nil
 	}
 
 	// Convert the word to a fetch attachment
@@ -243,28 +243,28 @@ func (l *lexer) fetchAttachment() (bool, fetchAttachmentId) {
 
 	switch lcWord {
 	case "envelope":
-		return ok, envelopeFetchAtt
+		return ok, &envelopeFetchAtt{}
 	case "flags":
-		return ok, flagsFetchAtt
+		return ok, &flagsFetchAtt{}
 	case "internaldate":
-		return ok, internalDateFetchAtt
+		return ok, &internalDateFetchAtt{}
 	case "rfc822.header":
-		return ok, rfc822HeaderFetchAtt
+		return ok, &rfc822HeaderFetchAtt{}
 	case "rfc822.size":
-		return ok, rfc822SizeFetchAtt
+		return ok, &rfc822SizeFetchAtt{}
 	case "rfc822.text":
-		return ok, rfc822TextFetchAtt
+		return ok, &rfc822TextFetchAtt{}
 	case "body":
 		// The parser will decide if this is BODY followed by section
-		return ok, bodyFetchAtt
+		return ok, &bodyFetchAtt{}
 	case "bodystructure":
-		return ok, bodyStructureFetchAtt
+		return ok, &bodyStructureFetchAtt{}
 	case "uid":
-		return ok, uidFetchAtt
+		return ok, &uidFetchAtt{}
 	case "body.peek":
-		return ok, bodyPeekFetchAtt
+		return ok, &bodyPeekFetchAtt{}
 	default:
-		return false, invalidFetchAtt
+		return false, nil
 	}
 
 }
