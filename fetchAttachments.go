@@ -3,6 +3,7 @@ package imapsrv
 import (
 	"fmt"
 	"strings"
+	"github.com/jhillyerd/go.enmime"
 )
 
 // A fetch attachment extracts part of a message and adds it to the response.
@@ -171,14 +172,12 @@ type bodyFetchAtt struct{}
 
 func (a *bodyFetchAtt) extract(resp response, msg *messageWrap) error {
 
-	mime, err := msg.parse()
+	// Like BODYSTRUCTURE without extensions
+	structure, err := bodyStructure(msg, false)
 	if err != nil {
 		return err
 	}
-	root := mime.Root
 
-	// Like BODYSTRUCTURE without extensions
-	structure := bodyStructure(root, false)
 	resp.putField("BODY", structure)
 
 	return nil
@@ -199,17 +198,56 @@ type bodyStructureFetchAtt struct{}
 
 func (a *bodyStructureFetchAtt) extract(resp response, msg *messageWrap) error {
 
-	mime, err := msg.parse()
+	// Include extensions
+	structure, err := bodyStructure(msg, true)
 	if err != nil {
 		return err
 	}
-	root := mime.Root
 
-	// Include extensions
-	structure := bodyStructure(root, true)
 	resp.putField("BODYSTRUCTURE", structure)
 
 	return nil
+}
+
+// body            = "(" (body-type-1part / body-type-mpart) ")"
+// body-type-1part = (body-type-basic / body-type-msg / body-type-text)
+//                   [SP body-ext-1part]
+//
+// body-type-basic = media-basic SP body-fields
+//                   ; MESSAGE subtype MUST NOT be "RFC822"
+//
+// body-type-mpart = 1*body SP media-subtype
+//                   [SP body-ext-mpart]
+//
+// body-type-msg   = media-message SP body-fields SP envelope
+//                   SP body SP body-fld-lines
+//
+// body-type-text  = media-text SP body-fields SP body-fld-lines
+// body-ext-1part  = body-fld-md5 [SP body-fld-dsp [SP body-fld-lang
+//                   [SP body-fld-loc *(SP body-extension)]]]
+//                     ; MUST NOT be returned on non-extensible
+//                     ; "BODY" fetch
+// body-ext-mpart  = body-fld-param [SP body-fld-dsp [SP body-fld-lang
+//                   [SP body-fld-loc *(SP body-extension)]]]
+//                    ; MUST NOT be returned on non-extensible
+//                    ; "BODY" fetch
+// body-fields     = body-fld-param SP body-fld-id SP body-fld-desc SP
+//                   body-fld-enc SP body-fld-octets
+func bodyStructure(msg *messageWrap, ext bool) (string, error) {
+
+	// Is this a multipart message?
+	if !enmime.IsMultipartMessage(msg.provider) {
+		// body-type-1part
+	} else {
+		mime, err := msg.parse()
+		if err != nil {
+			return "", err
+		}
+
+		root := mime.Root
+	}
+
+
 }
 
 //---- UID ---------------------------------------------------------------------
