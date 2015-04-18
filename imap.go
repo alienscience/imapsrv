@@ -216,7 +216,7 @@ func (c *client) handle() {
 // Execute an IMAP command in the given session
 // Returns true if execution can continue, false if not
 func (c *client) execute(cmd command, sess *session) bool {
-	
+
 	// Create an output channel
 	ch := make(chan response)
 
@@ -234,7 +234,7 @@ func (c *client) execute(cmd command, sess *session) bool {
 			c.logError(err)
 			ret = false
 		}
-	
+
 		// Should the connection be closed?
 		if r.isClose() {
 			ret = false

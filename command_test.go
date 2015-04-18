@@ -3,9 +3,7 @@ package imapsrv
 import "testing"
 import "fmt"
 
-
-
-func setupTest() (*Server,*session){
+func setupTest() (*Server, *session) {
 	m := &TestMailstore{}
 	s := NewServer(
 		Store(m),
@@ -14,8 +12,6 @@ func setupTest() (*Server,*session){
 	sess := createSession(1, s.config)
 	return s, sess
 }
-
-
 
 // A test mailstore used for unit testing
 type TestMailstore struct {
@@ -58,7 +54,6 @@ func (m *TestMailstore) GetMailboxes(path []string) ([]*Mailbox, error) {
 	}
 }
 
-
 // Get the sequence number of the first unseen message
 func (m *TestMailstore) FirstUnseen(mbox int64) (int64, error) {
 	return 4, nil
@@ -79,26 +74,21 @@ func (m *TestMailstore) NextUid(mbox int64) (int64, error) {
 	return 9, nil
 }
 
-
-
-
-func TestCapabilityCommand( t *testing.T){
+func TestCapabilityCommand(t *testing.T) {
 	_, session := setupTest()
 	cap := &capability{tag: "A00001"}
 	resp := cap.execute(session)
-	if (resp.tag != "A00001") || (resp.message != "CAPABILITY completed") || (resp.untagged[0] != "CAPABILITY IMAP4rev1"){
+	if (resp.tag != "A00001") || (resp.message != "CAPABILITY completed") || (resp.untagged[0] != "CAPABILITY IMAP4rev1") {
 		t.Error("Capability Failed - unexpected response.")
 		fmt.Println(resp)
 	}
 }
 
-
-
-func TestLogoutCommand( t *testing.T){
+func TestLogoutCommand(t *testing.T) {
 	_, session := setupTest()
 	log := &logout{tag: "A00004"}
 	resp := log.execute(session)
-	if (resp.tag != "A00004") || (resp.message != "LOGOUT completed") || (resp.untagged[0] != "BYE IMAP4rev1 Server logging out"){
+	if (resp.tag != "A00004") || (resp.message != "LOGOUT completed") || (resp.untagged[0] != "BYE IMAP4rev1 Server logging out") {
 		t.Error("Logout Failed - unexpected response.")
 		fmt.Println(resp)
 	}

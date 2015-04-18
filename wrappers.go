@@ -8,9 +8,9 @@ import (
 )
 
 // A wrapper around a Mailbox that provides helper functions
-// and Sequence numbers
+// and sequence numbers
 type mailboxWrap struct {
-	// The mailbox
+	// The user provided mailbox
 	provider Mailbox
 	// Sequence number to uid mapping
 	seqNums []int32
@@ -18,10 +18,12 @@ type mailboxWrap struct {
 
 // A wrapper around a Message the provides parsing functions
 type messageWrap struct {
-	// The message
+	// The user provided message
 	provider Message
-	// The parsed message, nil if the message has not been parsed
-	parsed *enmime.MIMEBody
+	// A parsed version of the message, nil if the message has not been parsed
+	message mail.Message
+	// The mime structure of the message, nil if the message has not been parsed
+	mime *enmime.MIMEBody
 }
 
 const dateFormat = "02-Jan-2006 15:04:05 -0700"
@@ -98,32 +100,43 @@ func (m *mailboxWrap) getUid(seqnum int32) (int32, error) {
 
 }
 
-// Parse a mail message wrapper
-func (m *messageWrap) parse() (*enmime.MIMEBody, error) {
+// Get a mail.Message from a wrapped message
+func (m *messageWrap) getMessage() (*mail.Message, error) {
 
-	// Has the message been parsed already?
-	if m.parsed != nil {
-		return m.parsed, nil
+	if m.message == nil {
+
+		reader, err := m.provider.Reader()
+		if err != nil {
+			return nil, err
+		}
+		defer reader.Close()
+
+		m.message, err = mail.ReadMessage(reader)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	reader, err := m.provider.Reader()
-	if err != nil {
-		return nil, err
-	}
-	defer reader.Close()
+	return m.message, nil
+}
 
-	// For now read the whole message into memory
-	msg, err := mail.ReadMessage(reader)
-	if err != nil {
-		return nil, err
+// Get the mime structure from a wrapped message
+func (m *messageWrap) getMime() (*enmime.MIMEBody, error) {
+
+	// Is the mime already available?
+	if m.mime == nil {
+		msg, err := m.getMessage()
+		if err != nil {
+			return nil, err
+		}
+
+		m.mime, err = enmime.ParseMIMEBody(msg)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	ret, err := enmime.ParseMIMEBody(msg)
-	if err != nil {
-		return nil, err
-	}
-
-	return ret, nil
+	return m.mime, nil
 }
 
 // Get the raw header from a message

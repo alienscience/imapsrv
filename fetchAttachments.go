@@ -2,8 +2,9 @@ package imapsrv
 
 import (
 	"fmt"
-	"strings"
 	"github.com/jhillyerd/go.enmime"
+	"strings"
+	"errors"
 )
 
 // A fetch attachment extracts part of a message and adds it to the response.
@@ -44,7 +45,7 @@ type fetchPartial struct {
 type envelopeFetchAtt struct{}
 
 func (a *envelopeFetchAtt) extract(resp response, msg *messageWrap) error {
-	mime, err := msg.parse()
+	mime, err := msg.getMime()
 	if err != nil {
 		return err
 	}
@@ -154,7 +155,7 @@ type rfc822TextFetchAtt struct{}
 
 func (a *rfc822TextFetchAtt) extract(resp response, msg *messageWrap) error {
 
-	mime, err := msg.parse()
+	mime, err := msg.getMime()
 	if err != nil {
 		return err
 	}
@@ -233,21 +234,49 @@ func (a *bodyStructureFetchAtt) extract(resp response, msg *messageWrap) error {
 //                    ; "BODY" fetch
 // body-fields     = body-fld-param SP body-fld-id SP body-fld-desc SP
 //                   body-fld-enc SP body-fld-octets
-func bodyStructure(msg *messageWrap, ext bool) (string, error) {
+func bodyStructure(wrap *messageWrap, ext bool) (string, error) {
+
+	// Extract a mail.Message
+	msg, err := wrap.getMessage()
+	if err != nil {
+		return "", nil
+	}
+
+	header := msg.Header
 
 	// Is this a multipart message?
-	if !enmime.IsMultipartMessage(msg.provider) {
+	if !enmime.IsMultipartMessage(msg) {
+
 		// body-type-1part
+		contentType := header.Get("Content-Type")
+		bodyType, mediaType := getMediaType(contentType)
+		bodyFields := getBodyFields(msg)
+
+		switch bodyType {
+		case bodyTypeBasic:
+			return strings.Join([]string{mediaType, bodyFields},
+				" "), nil
+		case bodyTypeMessage:
+			envelope := getEnvelope(header)
+			return strings.Join([]string{mediaType, bodyFields, envelope},
+				" "), nil
+		case bodyTypeText:
+			lineCount := fmt.Sprint(countLines(msg.Body))
+			return strings.Join([]string{mediaType, bodyFields, lineCount},
+				" "), nil
+		default:
+			return "", errors.New("Unknown body type")
+		}
 	} else {
-		mime, err := msg.parse()
+
+		// body-type-mpart
+		mime, err := wrap.getMime()
 		if err != nil {
 			return "", err
 		}
 
 		root := mime.Root
 	}
-
-
 }
 
 //---- UID ---------------------------------------------------------------------

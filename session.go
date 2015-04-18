@@ -219,6 +219,3 @@ func (s *session) depthFirstMailboxes(
 
 	return ret, err
 }
-
-
-
