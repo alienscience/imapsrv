@@ -1,10 +1,10 @@
 package imapsrv
 
 import (
+	"errors"
 	"fmt"
 	"github.com/jhillyerd/go.enmime"
 	"strings"
-	"errors"
 )
 
 // A fetch attachment extracts part of a message and adds it to the response.
@@ -197,6 +197,13 @@ func (a *bodySectionFetchAtt) extract(resp response, msg *messageWrap) error {
 
 type bodyStructureFetchAtt struct{}
 
+const (
+	bodyTypeUnknown = iota
+	bodyTypeBasic
+	bodyTypeMessage
+	bodyTypeText
+)
+
 func (a *bodyStructureFetchAtt) extract(resp response, msg *messageWrap) error {
 
 	// Include extensions
@@ -248,7 +255,7 @@ func bodyStructure(wrap *messageWrap, ext bool) (string, error) {
 	if !enmime.IsMultipartMessage(msg) {
 
 		// body-type-1part
-		contentType := header.Get("Content-Type")
+		contentType := header["Content-Type"]
 		bodyType, mediaType := getMediaType(contentType)
 		bodyFields := getBodyFields(msg)
 
@@ -277,6 +284,28 @@ func bodyStructure(wrap *messageWrap, ext bool) (string, error) {
 
 		root := mime.Root
 	}
+}
+
+func getMediaType(contentType []string) (uint8, string) {
+
+	if len(contentType) == 0 {
+		return bodyTypeMessage, `"MESSAGE" "RFC822"`
+	}
+
+	subtypes := strings.Split(contentType[0], "/")
+
+	// Get the body type
+	bodyType := bodyTypeUnknown
+
+	switch strings.ToLower(subtypes[0]) {
+	case "text":
+		bodyType = bodyTypeText
+	default:
+		bodyType = bodyTypeBasic
+	}
+
+	// Build the media-type string
+	mediaType := fmt.Sprintf(`"%s" "%s"`)
 }
 
 //---- UID ---------------------------------------------------------------------

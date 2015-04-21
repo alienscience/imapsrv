@@ -21,7 +21,7 @@ type messageWrap struct {
 	// The user provided message
 	provider Message
 	// A parsed version of the message, nil if the message has not been parsed
-	message mail.Message
+	message *mail.Message
 	// The mime structure of the message, nil if the message has not been parsed
 	mime *enmime.MIMEBody
 }
