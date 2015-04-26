@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/jhillyerd/go.enmime"
+	"mime"
 	"strings"
 )
 
@@ -246,7 +247,7 @@ func bodyStructure(wrap *messageWrap, ext bool) (string, error) {
 	// Extract a mail.Message
 	msg, err := wrap.getMessage()
 	if err != nil {
-		return "", nil
+		return "", err
 	}
 
 	header := msg.Header
@@ -256,8 +257,11 @@ func bodyStructure(wrap *messageWrap, ext bool) (string, error) {
 
 		// body-type-1part
 		contentType := header["Content-Type"]
-		bodyType, mediaType := getMediaType(contentType)
-		bodyFields := getBodyFields(msg)
+		bodyType, mediaType, bodyParams := getMediaType(contentType)
+		bodyFields, err := getBodyFields(wrap, bodyParams)
+		if err != nil {
+			return "", err
+		}
 
 		switch bodyType {
 		case bodyTypeBasic:
@@ -283,29 +287,106 @@ func bodyStructure(wrap *messageWrap, ext bool) (string, error) {
 		}
 
 		root := mime.Root
+
+		// TODO: finish this
+		return "", nil
 	}
 }
 
-func getMediaType(contentType []string) (uint8, string) {
+// Returns a bodyType identifier, a media type string and media type parameters
+func getMediaType(contentType []string) (uint8, string, map[string]string) {
 
 	if len(contentType) == 0 {
-		return bodyTypeMessage, `"MESSAGE" "RFC822"`
+		// There is no media type
+		return bodyTypeMessage, `"MESSAGE" "RFC822"`, nil
 	}
 
-	subtypes := strings.Split(contentType[0], "/")
+	mediaString, params, err := mime.ParseMediaType(contentType[0])
+	if err != nil {
+		// The media type is invalid
+		return bodyTypeMessage, `"MESSAGE" "RFC822"`, nil
+	}
 
-	// Get the body type
-	bodyType := bodyTypeUnknown
+	mediaTypes := strings.Split(mediaString, "/")
 
-	switch strings.ToLower(subtypes[0]) {
-	case "text":
+	// Get the body type id
+	bodyType := uint8(bodyTypeUnknown)
+	mediaType := strings.ToUpper(mediaTypes[0])
+
+	switch mediaType {
+	case "TEXT":
 		bodyType = bodyTypeText
 	default:
 		bodyType = bodyTypeBasic
+
 	}
 
-	// Build the media-type string
-	mediaType := fmt.Sprintf(`"%s" "%s"`)
+	// Build the return strings
+	mediaRet := fmt.Sprintf(`"%s" "%s"`, mediaType, strings.ToUpper(mediaTypes[1]))
+	return bodyType, mediaRet, params
+}
+
+// body-fields     = body-fld-param SP body-fld-id SP body-fld-desc SP
+//                   body-fld-enc SP body-fld-octets
+// body-fld-desc   = nstring
+// body-fld-enc    = (DQUOTE ("7BIT" / "8BIT" / "BINARY" / "BASE64"/
+//                  "QUOTED-PRINTABLE") DQUOTE) / string
+// body-fld-id     = nstring
+// body-fld-octets = number
+// body-fld-param  = "(" string SP string *(SP string SP string) ")" / nil
+func getBodyFields(wrap *messageWrap, bodyParams map[string]string) (string, error) {
+
+	msg, err := wrap.getMessage()
+	if err != nil {
+		return "", err
+	}
+	header := msg.Header
+
+	// body-fld-param
+	bodyFieldParam := "NIL"
+	if len(bodyParams) > 0 {
+		params := make([]string, 0, 4)
+		for k, v := range bodyParams {
+			kv := fmt.Sprintf(`"%s" "%s"`, k, v)
+			params = append(params, kv)
+		}
+		bodyFieldParam = fmt.Sprint("(", strings.Join(params, " "), ")")
+	}
+
+	// body-fld-id
+	messageIds := header["Message-ID"]
+	bodyFieldId := "NIL"
+	if len(messageIds) > 0 {
+		bodyFieldId = fmt.Sprintf(`"%s"`, messageIds[0])
+	}
+
+	// body-fld-desc
+	descs := header["Content-Description"]
+	bodyFieldDesc := "NIL"
+	if len(descs) > 0 {
+		bodyFieldDesc = fmt.Sprintf(`"%s"`, descs[0])
+	}
+
+	// body-fld-enc
+	encodings := header["Content-Transfer-Encoding"]
+	bodyFieldEnc := `"7BIT"`
+	if len(encodings) > 0 {
+		bodyFieldEnc := fmt.Sprintf(`"%s"`, strings.ToUpper(encodings[0]))
+	}
+
+	// body-field-octets
+	octets, err := wrap.provider.Size()
+	if err != nil {
+		return "", err
+	}
+	bodyFieldOctets := fmt.Sprintf("%d", octets)
+
+	return fmt.Sprint(
+		bodyFieldParam, " ",
+		bodyFieldId, " ",
+		bodyFieldDesc, " ",
+		bodyFieldEnc, " ",
+		bodyFieldOctets), nil
 }
 
 //---- UID ---------------------------------------------------------------------
