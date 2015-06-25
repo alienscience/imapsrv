@@ -3,9 +3,7 @@ package imapsrv
 import "testing"
 import "fmt"
 
-
-
-func setupTest() (*Server,*session){
+func setupTest() (*Server, *session) {
 	m := &TestMailstore{}
 	s := NewServer(
 		Store(m),
@@ -15,13 +13,11 @@ func setupTest() (*Server,*session){
 	return s, sess
 }
 
-
-
-// A test mailstore used for unit testing
+// TestMailstore is a dummy mailstore
 type TestMailstore struct {
 }
 
-// Get mailbox information
+// GetMailbox gets dummy Mailbox information
 func (m *TestMailstore) GetMailbox(path []string) (*Mailbox, error) {
 	return &Mailbox{
 		Name: "inbox",
@@ -29,17 +25,17 @@ func (m *TestMailstore) GetMailbox(path []string) (*Mailbox, error) {
 	}, nil
 }
 
-// Get a list of mailboxes at the given path
+// GetMailboxes lists dummy Mailboxes
 func (m *TestMailstore) GetMailboxes(path []string) ([]*Mailbox, error) {
 	if len(path) == 0 {
 		// Root
 		return []*Mailbox{
-			&Mailbox{
+			{
 				Name: "inbox",
 				Path: []string{"inbox"},
 				Id:   1,
 			},
-			&Mailbox{
+			{
 				Name: "spam",
 				Path: []string{"spam"},
 				Id:   2,
@@ -47,7 +43,7 @@ func (m *TestMailstore) GetMailboxes(path []string) ([]*Mailbox, error) {
 		}, nil
 	} else if len(path) == 1 && path[0] == "inbox" {
 		return []*Mailbox{
-			&Mailbox{
+			{
 				Name: "starred",
 				Path: []string{"inbox", "stared"},
 				Id:   3,
@@ -58,47 +54,43 @@ func (m *TestMailstore) GetMailboxes(path []string) ([]*Mailbox, error) {
 	}
 }
 
-
-// Get the sequence number of the first unseen message
+// FirstUnseen gets a dummy number of first unseen messages in an IMAP mailbox
 func (m *TestMailstore) FirstUnseen(mbox int64) (int64, error) {
 	return 4, nil
 }
 
-// Get the total number of messages in an IMAP mailbox
+// TotalMessages gets a dummy number of messages in an IMAP mailbox
 func (m *TestMailstore) TotalMessages(mbox int64) (int64, error) {
 	return 8, nil
 }
 
-// Get the total number of unread messages in an IMAP mailbox
+// RecentMessages gets a dummy number of unread messages in an IMAP mailbox
 func (m *TestMailstore) RecentMessages(mbox int64) (int64, error) {
 	return 4, nil
 }
 
-// Get the next available uid in an IMAP mailbox
+// NextUid gets a dummy next-uid in an IMAP mailbox
 func (m *TestMailstore) NextUid(mbox int64) (int64, error) {
 	return 9, nil
 }
 
-
-
-
-func TestCapabilityCommand( t *testing.T){
+// TestCapabilityCommand tests the correctness of the CAPABILITY command
+func TestCapabilityCommand(t *testing.T) {
 	_, session := setupTest()
 	cap := &capability{tag: "A00001"}
 	resp := cap.execute(session)
-	if (resp.tag != "A00001") || (resp.message != "CAPABILITY completed") || (resp.untagged[0] != "CAPABILITY IMAP4rev1"){
+	if (resp.tag != "A00001") || (resp.message != "CAPABILITY completed") || (resp.untagged[0] != "CAPABILITY IMAP4rev1") {
 		t.Error("Capability Failed - unexpected response.")
 		fmt.Println(resp)
 	}
 }
 
-
-
-func TestLogoutCommand( t *testing.T){
+// TestLogoutCommand tests the correctness of the LOGOUT command
+func TestLogoutCommand(t *testing.T) {
 	_, session := setupTest()
 	log := &logout{tag: "A00004"}
 	resp := log.execute(session)
-	if (resp.tag != "A00004") || (resp.message != "LOGOUT completed") || (resp.untagged[0] != "BYE IMAP4rev1 Server logging out"){
+	if (resp.tag != "A00004") || (resp.message != "LOGOUT completed") || (resp.untagged[0] != "BYE IMAP4rev1 Server logging out") {
 		t.Error("Logout Failed - unexpected response.")
 		fmt.Println(resp)
 	}

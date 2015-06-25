@@ -25,4 +25,3 @@ func main() {
 		log.Print("IMAP server not started")
 	}
 }
-

@@ -8,6 +8,7 @@ import (
 	"strconv"
 )
 
+// lexer is responsible for reading input, and making sense of it
 type lexer struct {
 	// Line based reader
 	reader *textproto.Reader
@@ -39,7 +40,7 @@ const (
 	backslash        = 0x5c
 )
 
-// char not present in the astring charset
+// astringExceptionsChar is a list of chars that are not present in the astring charset
 var astringExceptionsChar = []byte{
 	space,
 	leftParenthesis,
@@ -50,7 +51,7 @@ var astringExceptionsChar = []byte{
 	leftCurly,
 }
 
-// char not present in the tag charset
+// tagExceptionsChar is a list of chars that are not present in the tag charset
 var tagExceptionsChar = []byte{
 	space,
 	leftParenthesis,
@@ -62,7 +63,7 @@ var tagExceptionsChar = []byte{
 	plus,
 }
 
-// char not present in the list-mailbox charset
+// listMailboxExceptionsChar is a list of chars that are  not present in the list-mailbox charset
 var listMailboxExceptionsChar = []byte{
 	space,
 	leftParenthesis,
@@ -72,7 +73,7 @@ var listMailboxExceptionsChar = []byte{
 	leftCurly,
 }
 
-// Create a partially initialised IMAP lexer
+// createLexer creates a partially initialised IMAP lexer
 // lexer.newLine() must be the first call to this lexer
 func createLexer(in *bufio.Reader) *lexer {
 	return &lexer{reader: textproto.NewReader(in)}
@@ -80,7 +81,7 @@ func createLexer(in *bufio.Reader) *lexer {
 
 //-------- IMAP tokens ---------------------------------------------------------
 
-// An astring
+// astring treats the input as a string
 func (l *lexer) astring() (bool, string) {
 	l.skipSpace()
 	l.startToken()
@@ -88,7 +89,7 @@ func (l *lexer) astring() (bool, string) {
 	return l.generalString("ASTRING", astringExceptionsChar)
 }
 
-// A tag string
+// tag treats the input as a tag string
 func (l *lexer) tag() (bool, string) {
 	l.skipSpace()
 	l.startToken()
@@ -96,7 +97,7 @@ func (l *lexer) tag() (bool, string) {
 	return l.nonquoted("TAG", tagExceptionsChar)
 }
 
-// A list mailbox
+// listMailbox treats the input as a list mailbox
 func (l *lexer) listMailbox() (bool, string) {
 	l.skipSpace()
 	l.startToken()
@@ -106,7 +107,7 @@ func (l *lexer) listMailbox() (bool, string) {
 
 //-------- IMAP token helper functions -----------------------------------------
 
-// Handle a string that can be bare, a literal or quoted
+// generalString handles a string that can be bare, a literal or quoted
 func (l *lexer) generalString(name string, exceptions []byte) (bool, string) {
 
 	// Consider the first character - this gives the type of argument
@@ -122,7 +123,7 @@ func (l *lexer) generalString(name string, exceptions []byte) (bool, string) {
 	}
 }
 
-// Read a quoted string
+// qstring reads a quoted string
 func (l *lexer) qstring() string {
 
 	var buffer = make([]byte, 0, 16)
@@ -154,7 +155,7 @@ func (l *lexer) qstring() string {
 	return string(buffer)
 }
 
-// Parse a length tagged literal
+// literal parses a length tagged literal
 // TODO: send a continuation request after the first line is read
 func (l *lexer) literal() string {
 
@@ -194,7 +195,7 @@ func (l *lexer) literal() string {
 
 	for {
 		buffer = append(buffer, c)
-	
+
 		// Is this the end of the literal?
 		length -= 1
 		if length == 0 {
@@ -207,7 +208,7 @@ func (l *lexer) literal() string {
 	return string(buffer)
 }
 
-// A non-quoted string
+// nonquoted reads a non-quoted string
 func (l *lexer) nonquoted(name string, exceptions []byte) (bool, string) {
 
 	buffer := make([]byte, 0, 16)
@@ -231,7 +232,7 @@ func (l *lexer) nonquoted(name string, exceptions []byte) (bool, string) {
 
 //-------- Low level lexer functions -------------------------------------------
 
-// Consume a single byte and return the new character
+// consume a single byte and return the new character
 // Does not go through newlines
 func (l *lexer) consume() byte {
 
@@ -246,7 +247,7 @@ func (l *lexer) consume() byte {
 	return l.current()
 }
 
-// Consume a single byte and return the new character
+// consumeAll a single byte and return the new character
 // Goes through newlines
 func (l *lexer) consumeAll() byte {
 
@@ -261,12 +262,12 @@ func (l *lexer) consumeAll() byte {
 	return l.current()
 }
 
-// Get the current byte
+// current gets the current byte
 func (l *lexer) current() byte {
 	return l.line[l.idx]
 }
 
-// Move onto a new line
+// newLine moves onto a new line
 func (l *lexer) newLine() {
 
 	// Read the line
@@ -281,7 +282,7 @@ func (l *lexer) newLine() {
 	l.tokens = make([]int, 0, 8)
 }
 
-// Skip spaces
+// skipSpace skips any spaces
 func (l *lexer) skipSpace() {
 	c := l.current()
 
@@ -290,12 +291,12 @@ func (l *lexer) skipSpace() {
 	}
 }
 
-// Mark the start a new token
+// startToken marks the start a new token
 func (l *lexer) startToken() {
 	l.tokens = append(l.tokens, l.idx)
 }
 
-// Move back one token
+// pushBack moves back one token
 func (l *lexer) pushBack() {
 	last := len(l.tokens) - 1
 	l.idx = l.tokens[last]

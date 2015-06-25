@@ -1,11 +1,10 @@
-
 package imapsrv
 
 import (
 	"bufio"
 )
 
-// An IMAP response
+// response represents an IMAP response
 type response struct {
 	// The tag of the command that this is the response for
 	tag string
@@ -19,7 +18,7 @@ type response struct {
 	closeConnection bool
 }
 
-// Create a response
+// createResponse creates a response
 func createResponse(tag string, condition string, message string) *response {
 	return &response{
 		tag:       tag,
@@ -29,41 +28,41 @@ func createResponse(tag string, condition string, message string) *response {
 	}
 }
 
-// Create a OK response
+// ok creatse a OK response
 func ok(tag string, message string) *response {
 	return createResponse(tag, "OK", message)
 }
 
-// Create an BAD response
+// bad creates a BAD response
 func bad(tag string, message string) *response {
 	return createResponse(tag, "BAD", message)
 }
 
-// Create a NO response
+// no creates a NO response
 func no(tag string, message string) *response {
 	return createResponse(tag, "NO", message)
 }
 
-// Write an untagged fatal response
+// fatalResponse writes an untagged fatal response (BYE)
 func fatalResponse(w *bufio.Writer, err error) {
 	resp := createResponse("*", "BYE", err.Error())
 	resp.closeConnection = true
 	resp.write(w)
 }
 
-// Add an untagged line to a response
+// extra adds an untagged line to a response
 func (r *response) extra(line string) *response {
 	r.untagged = append(r.untagged, line)
 	return r
 }
 
-// Mark that a response should close the connection
+// shouldClose marks that a response should close the connection
 func (r *response) shouldClose() *response {
 	r.closeConnection = true
 	return r
 }
 
-// Write a response to the given writer
+// write a response to the given Writer
 func (r *response) write(w *bufio.Writer) error {
 
 	// Write untagged lines
@@ -83,4 +82,3 @@ func (r *response) write(w *bufio.Writer) error {
 	w.Flush()
 	return nil
 }
-
