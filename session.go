@@ -9,7 +9,7 @@ import (
 type state int
 
 const (
-	notAuthenticated = iota
+	notAuthenticated state = iota
 	authenticated
 	selected
 )
@@ -24,14 +24,18 @@ type session struct {
 	mailbox *Mailbox
 	// IMAP configuration
 	config *config
+	// The server the session is for
+	server *Server
 }
 
 // Create a new IMAP session
-func createSession(id string, config *config) *session {
+func createSession(id string, config *config, server *Server) *session {
 	return &session{
 		id:     id,
 		st:     notAuthenticated,
-		config: config}
+		config: config,
+		server: server,
+	}
 }
 
 // Log a message with session information
@@ -88,7 +92,7 @@ func (s *session) list(reference []string, pattern []string) ([]*Mailbox, error)
 	}
 
 	// Recursively get a listing
-	return s.depthFirstMailboxes(ret, path, pattern[wildcard:len(pattern)])
+	return s.depthFirstMailboxes(ret, path, pattern[wildcard:])
 }
 
 // Add mailbox information to the given response

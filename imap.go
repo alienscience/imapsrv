@@ -3,9 +3,10 @@ package imapsrv
 
 import (
 	"bufio"
+	"fmt"
+	"github.com/EtienneBruines/imapsrv/auth"
 	"log"
 	"net"
-	"fmt"
 )
 
 // Default listen interface/port
@@ -16,7 +17,11 @@ type config struct {
 	maxClients uint
 	listeners  []listener
 	mailstore  Mailstore
+
+	authBackend auth.AuthStore
 }
+
+type option func(*Server) error
 
 // Listener config
 type listener struct {
@@ -49,15 +54,22 @@ func defaultConfig() *config {
 }
 
 // Add a mailstore to the config
-func Store(m Mailstore) func(*Server) error {
+func StoreOption(m Mailstore) option {
 	return func(s *Server) error {
 		s.config.mailstore = m
 		return nil
 	}
 }
 
+func AuthStoreOption(a auth.AuthStore) option {
+	return func(s *Server) error {
+		s.config.authBackend = a
+		return nil
+	}
+}
+
 // Add an interface to listen to
-func Listen(Addr string) func(*Server) error {
+func ListenOption(Addr string) option {
 	return func(s *Server) error {
 		l := listener{
 			addr: Addr,
@@ -68,14 +80,14 @@ func Listen(Addr string) func(*Server) error {
 }
 
 // Set MaxClients config
-func MaxClients(max uint) func(*Server) error {
+func MaxClientsOption(max uint) option {
 	return func(s *Server) error {
 		s.config.maxClients = max
 		return nil
 	}
 }
 
-func NewServer(options ...func(*Server) error) *Server {
+func NewServer(options ...option) *Server {
 	// set the default config
 	s := &Server{}
 	s.config = defaultConfig()
@@ -154,7 +166,7 @@ func (s *Server) runListener(listener net.Listener, id int) {
 			config: s.config,
 		}
 
-		go client.handle()
+		go client.handle(s)
 
 		clientNumber += 1
 	}
@@ -162,7 +174,7 @@ func (s *Server) runListener(listener net.Listener, id int) {
 }
 
 // Handle requests from an IMAP client
-func (c *client) handle() {
+func (c *client) handle(s *Server) {
 
 	// Close the client on exit from this function
 	defer c.close()
@@ -188,7 +200,7 @@ func (c *client) handle() {
 	}
 
 	//  Create a session
-	sess := createSession(c.id, c.config)
+	sess := createSession(c.id, c.config, s)
 
 	for {
 		// Get the next IMAP command

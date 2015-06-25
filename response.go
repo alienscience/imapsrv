@@ -1,4 +1,3 @@
-
 package imapsrv
 
 import (
@@ -83,4 +82,3 @@ func (r *response) write(w *bufio.Writer) error {
 	w.Flush()
 	return nil
 }
-

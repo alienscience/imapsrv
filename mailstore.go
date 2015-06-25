@@ -73,12 +73,12 @@ func (m *DummyMailstore) GetMailboxes(path []string) ([]*Mailbox, error) {
 	if len(path) == 0 {
 		// Root
 		return []*Mailbox{
-			&Mailbox{
+			{
 				Name: "inbox",
 				Path: []string{"inbox"},
 				Id:   1,
 			},
-			&Mailbox{
+			{
 				Name: "spam",
 				Path: []string{"spam"},
 				Id:   2,
@@ -86,7 +86,7 @@ func (m *DummyMailstore) GetMailboxes(path []string) ([]*Mailbox, error) {
 		}, nil
 	} else if len(path) == 1 && path[0] == "inbox" {
 		return []*Mailbox{
-			&Mailbox{
+			{
 				Name: "starred",
 				Path: []string{"inbox", "stared"},
 				Id:   3,
