@@ -2,7 +2,7 @@ package main
 
 import (
 	imap "github.com/alienscience/imapsrv"
-	"github.com/alienscience/imapsrv/auth"
+	"github.com/alienscience/imapsrv/auth/boltstore"
 	"io/ioutil"
 	"log"
 )
@@ -18,7 +18,7 @@ func main() {
 	}
 
 	// Initialize authentication backend
-	a, err := auth.NewBoltAuthStore(tmpFile.Name())
+	a, err := boltstore.NewBoltAuthStore(tmpFile.Name())
 	if err != nil {
 		log.Fatalln("Could not create BoltAuthStore:", err)
 	}

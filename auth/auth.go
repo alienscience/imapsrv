@@ -9,7 +9,7 @@ var (
 	ErrNotConnected = fmt.Errorf("database not connected")
 )
 
-// AuthStore contacts the backend to query about the users
+// AuthStore contacts the backend to query about the users. It is used for database interaction only.
 type AuthStore interface {
 	// Authenticate attempts to authenticate the given credentials
 	Authenticate(username, plainPassword string) (success bool, err error)

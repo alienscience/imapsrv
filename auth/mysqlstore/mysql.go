@@ -1,7 +1,11 @@
-package auth
+// Package mysqlstore holds an implementation of github.com/alienscience/imapsrv/auth - AuthStore, using MySQL
+package mysqlstore
 
 // TODO: implement all these functions for MySQL... but with which driver?
-// https://github.com/go-sql-driver/mysql looks fine
+// or do we want two packages, one for each driver:
+// go-sql-driver/mysql
+// ziutek/mymysql
+
 type MySQLAuthStore struct {
 }
 

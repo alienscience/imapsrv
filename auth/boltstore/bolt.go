@@ -1,7 +1,10 @@
-package auth
+// Package boltstore holds an implementation of github.com/alienscience/imapsrv/auth - AuthStore, using
+// github.com/boltdb/bolt - DB.
+package boltstore
 
 import (
 	"fmt"
+	"github.com/alienscience/imapsrv/auth"
 	"github.com/boltdb/bolt"
 	"os"
 )
@@ -44,7 +47,7 @@ func NewBoltAuthStore(filename string) (*BoltAuthStore, error) {
 func (b *BoltAuthStore) Authenticate(username, plainPassword string) (success bool, err error) {
 	// TODO: do we want this check here, or in a separate "IsAvailable" method in the interface?
 	if b.connection == nil {
-		return false, ErrNotConnected
+		return false, auth.ErrNotConnected
 	}
 
 	var hashedPassword []byte
@@ -61,16 +64,16 @@ func (b *BoltAuthStore) Authenticate(username, plainPassword string) (success bo
 		return false, fmt.Errorf("user %s not found", username)
 	}
 
-	return CheckPassword([]byte(plainPassword), hashedPassword), nil
+	return auth.CheckPassword([]byte(plainPassword), hashedPassword), nil
 }
 
 // CreateUser creates a user with the given username
 func (b *BoltAuthStore) CreateUser(username, plainPassword string) error {
 	if b.connection == nil {
-		return ErrNotConnected
+		return auth.ErrNotConnected
 	}
 
-	hashedPassword, err := HashPassword([]byte(plainPassword))
+	hashedPassword, err := auth.HashPassword([]byte(plainPassword))
 	if err != nil {
 		return err
 	}
@@ -85,8 +88,9 @@ func (b *BoltAuthStore) CreateUser(username, plainPassword string) error {
 // ResetPassword resets the password for the given username
 func (b *BoltAuthStore) ResetPassword(username, plainPassword string) error {
 	if b.connection == nil {
-		return ErrNotConnected
+		return auth.ErrNotConnected
 	}
+	// TODO: implement
 	return nil
 }
 
@@ -95,15 +99,17 @@ func (b *BoltAuthStore) ResetPassword(username, plainPassword string) error {
 // 		 about users is desired, and not just the usernames.
 func (b *BoltAuthStore) ListUsers() (usernames []string, err error) {
 	if b.connection == nil {
-		return []string{}, ErrNotConnected
+		return []string{}, auth.ErrNotConnected
 	}
+	// TODO: implement
 	return []string{}, nil
 }
 
 // DeleteUser removes the username from the database entirely
 func (b *BoltAuthStore) DeleteUser(username string) error {
 	if b.connection == nil {
-		return ErrNotConnected
+		return auth.ErrNotConnected
 	}
+	// TODO: implement
 	return nil
 }
