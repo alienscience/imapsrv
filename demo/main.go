@@ -12,12 +12,9 @@ func main() {
 	//s.Start()
 
 	// More advanced config
-	m := &imap.DummyMailstore{}
-
 	s := imap.NewServer(
 		imap.Listen("127.0.0.1:1193"),
 		imap.Listen("127.0.0.1:1194"),
-		imap.Store(m),
 	)
 
 	err := s.Start()
