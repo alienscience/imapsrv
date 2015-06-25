@@ -57,11 +57,11 @@ type Mailstore interface {
 }
 
 // DummyMailstore is used for demonstrating the IMAP server
-type DummyMailstore struct {
+type dummyMailstore struct {
 }
 
 // GetMailbox gets mailbox information
-func (m *DummyMailstore) GetMailbox(path []string) (*Mailbox, error) {
+func (m *dummyMailstore) GetMailbox(path []string) (*Mailbox, error) {
 	return &Mailbox{
 		Name: "inbox",
 		Path: []string{"inbox"},
@@ -70,7 +70,7 @@ func (m *DummyMailstore) GetMailbox(path []string) (*Mailbox, error) {
 }
 
 // GetMailboxes gets a list of mailboxes at the given path
-func (m *DummyMailstore) GetMailboxes(path []string) ([]*Mailbox, error) {
+func (m *dummyMailstore) GetMailboxes(path []string) ([]*Mailbox, error) {
 	log.Printf("GetMailboxes %v", path)
 
 	if len(path) == 0 {
@@ -101,21 +101,21 @@ func (m *DummyMailstore) GetMailboxes(path []string) ([]*Mailbox, error) {
 }
 
 // FirstUnseen gets the sequence number of the first unseen message in an IMAP mailbox
-func (m *DummyMailstore) FirstUnseen(mbox int64) (int64, error) {
+func (m *dummyMailstore) FirstUnseen(mbox int64) (int64, error) {
 	return 4, nil
 }
 
 // TotalMessages gets the total number of messages in an IMAP mailbox
-func (m *DummyMailstore) TotalMessages(mbox int64) (int64, error) {
+func (m *dummyMailstore) TotalMessages(mbox int64) (int64, error) {
 	return 8, nil
 }
 
 // RecentMessages gets the total number of unread messages in an IMAP mailbox
-func (m *DummyMailstore) RecentMessages(mbox int64) (int64, error) {
+func (m *dummyMailstore) RecentMessages(mbox int64) (int64, error) {
 	return 4, nil
 }
 
 // DummyMailstore gets the next available uid in an IMAP mailbox
-func (m *DummyMailstore) NextUid(mbox int64) (int64, error) {
+func (m *dummyMailstore) NextUid(mbox int64) (int64, error) {
 	return 9, nil
 }
