@@ -1,4 +1,3 @@
-
 package imapsrv
 
 import (
@@ -26,7 +25,6 @@ func createParser(in *bufio.Reader) *parser {
 	return &parser{lexer: lexer}
 }
 
-
 //----- Commands ---------------------------------------------------------------
 
 // Parse the next command
@@ -39,7 +37,6 @@ func (p *parser) next() command {
 	tag := p.expectString(p.lexer.tag)
 	rawCommand := p.expectString(p.lexer.astring)
 
-
 	// Parse the command based on its lowercase value
 	lcCommand := strings.ToLower(rawCommand)
 
@@ -48,6 +45,8 @@ func (p *parser) next() command {
 		return p.noop(tag)
 	case "capability":
 		return p.capability(tag)
+	case "starttls":
+		return p.starttls(tag)
 	case "login":
 		return p.login(tag)
 	case "logout":
@@ -80,6 +79,10 @@ func (p *parser) login(tag string) command {
 
 	// Create the command
 	return &login{tag: tag, userId: userId, password: password}
+}
+
+func (p *parser) starttls(tag string) command {
+	return &starttls{tag: tag, parser: p}
 }
 
 // Create a logout command
@@ -119,7 +122,7 @@ func (p *parser) unknown(tag string, cmd string) command {
 
 // Get a string token using the given lexer function
 // If the lexing fails then panic
-func (p *parser) expectString(lex func () (bool, string)) string {
+func (p *parser) expectString(lex func() (bool, string)) string {
 	ok, ret := lex()
 	if !ok {
 		msg := fmt.Sprintf("Parser unexpected %q", p.lexer.current())

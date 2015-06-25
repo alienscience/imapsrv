@@ -1,4 +1,3 @@
-
 package imapsrv
 
 import (
@@ -17,6 +16,10 @@ type response struct {
 	untagged []string
 	// Should the connection be closed after the response has been sent?
 	closeConnection bool
+	// bufInReplacement is not-null if all incoming traffic should be read from this instead
+	bufInReplacement *bufio.Reader
+	// bufOutReplacement is not-null if all outgoing traffic should be written to this instead
+	bufOutReplacement *bufio.Writer
 }
 
 // Create a response
@@ -44,6 +47,10 @@ func no(tag string, message string) *response {
 	return createResponse(tag, "NO", message)
 }
 
+func empty() *response {
+	return &response{}
+}
+
 // Write an untagged fatal response
 func fatalResponse(w *bufio.Writer, err error) {
 	resp := createResponse("*", "BYE", err.Error())
@@ -60,6 +67,13 @@ func (r *response) extra(line string) *response {
 // Mark that a response should close the connection
 func (r *response) shouldClose() *response {
 	r.closeConnection = true
+	return r
+}
+
+// replaceBuffers sets two possible buffers that need replacement
+func (r *response) replaceBuffers(reader *bufio.Reader, writer *bufio.Writer) *response {
+	r.bufInReplacement = reader
+	r.bufOutReplacement = writer
 	return r
 }
 
@@ -83,4 +97,3 @@ func (r *response) write(w *bufio.Writer) error {
 	w.Flush()
 	return nil
 }
-

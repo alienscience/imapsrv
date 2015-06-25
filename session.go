@@ -3,6 +3,7 @@ package imapsrv
 import (
 	"fmt"
 	"log"
+	"net"
 )
 
 // IMAP session states
@@ -16,22 +17,32 @@ const (
 
 // An IMAP session
 type session struct {
-	// The client id
+	// id is a unique identifier for this session
 	id string
-	// The state of the session
+	// st indicates the current state of the session
 	st state
-	// The currently selected mailbox (if st == selected)
+	// mailbox is the currently selected mailbox (if st == selected)
 	mailbox *Mailbox
-	// IMAP configuration
+	// config refers to the IMAP configuration
 	config *config
+	// server refers to the server the session is at
+	server *Server
+	// listener is the listener that's handling this current session
+	listener *listener
+	// conn is the currently active TCP connection
+	conn net.Conn
 }
 
 // Create a new IMAP session
-func createSession(id string, config *config) *session {
+func createSession(id string, config *config, server *Server, listener *listener, conn net.Conn) *session {
 	return &session{
-		id:     id,
-		st:     notAuthenticated,
-		config: config}
+		id:       id,
+		st:       notAuthenticated,
+		config:   config,
+		server:   server,
+		listener: listener,
+		conn:     conn,
+	}
 }
 
 // Log a message with session information
@@ -88,7 +99,7 @@ func (s *session) list(reference []string, pattern []string) ([]*Mailbox, error)
 	}
 
 	// Recursively get a listing
-	return s.depthFirstMailboxes(ret, path, pattern[wildcard:len(pattern)])
+	return s.depthFirstMailboxes(ret, path, pattern[wildcard:])
 }
 
 // Add mailbox information to the given response

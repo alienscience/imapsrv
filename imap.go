@@ -3,9 +3,10 @@ package imapsrv
 
 import (
 	"bufio"
+	"crypto/tls"
+	"fmt"
 	"log"
 	"net"
-	"fmt"
 )
 
 // Default listen interface/port
@@ -20,7 +21,10 @@ type config struct {
 
 // Listener config
 type listener struct {
-	addr string
+	addr         string
+	tls          bool
+	certificates []tls.Certificate
+	listener     net.Listener
 }
 
 // An IMAP Server
@@ -33,7 +37,11 @@ type Server struct {
 
 // An IMAP Client as seen by an IMAP server
 type client struct {
-	conn   net.Conn
+	// conn is the lowest-level connection layer
+	conn net.Conn
+	// listener refers to the listener that's handling this client
+	listener listener
+
 	bufin  *bufio.Reader
 	bufout *bufio.Writer
 	id     string
@@ -67,6 +75,27 @@ func Listen(Addr string) func(*Server) error {
 	}
 }
 
+func ListenSTARTTLS(Addr, certFile, keyFile string) func(*Server) error {
+	return func(s *Server) error {
+		// Load the ceritificates
+		var err error
+		certs := make([]tls.Certificate, 1)
+		certs[0], err = tls.LoadX509KeyPair(certFile, keyFile)
+		if err != nil {
+			return err
+		}
+
+		// Set up the listener
+		l := listener{
+			addr:         Addr,
+			tls:          true,
+			certificates: certs,
+		}
+		s.config.listeners = append(s.config.listeners, l)
+		return nil
+	}
+}
+
 // Set MaxClients config
 func MaxClients(max uint) func(*Server) error {
 	return func(s *Server) error {
@@ -93,30 +122,26 @@ func NewServer(options ...func(*Server) error) *Server {
 
 // Start an IMAP server
 func (s *Server) Start() error {
-
-	listeners := make([]net.Listener, 0, 4)
-
 	// Use a default listener if none exist
 	if len(s.config.listeners) == 0 {
 		s.config.listeners = append(s.config.listeners,
 			listener{addr: DefaultListener})
 	}
 
+	var err error
 	// Start listening for IMAP connections
-	for _, iface := range s.config.listeners {
-		listener, err := net.Listen("tcp", iface.addr)
+	for i, iface := range s.config.listeners {
+		s.config.listeners[i].listener, err = net.Listen("tcp", iface.addr)
 		if err != nil {
 			log.Printf("IMAP cannot listen on %s, %v", iface.addr, err)
 			return err
 		}
-
-		listeners = append(listeners, listener)
 	}
 
 	// Start the server on each port
-	n := len(listeners)
+	n := len(s.config.listeners)
 	for i := 0; i < n; i += 1 {
-		listener := listeners[i]
+		listener := s.config.listeners[i]
 
 		// Start each listener in a separate go routine
 		// except for the last one
@@ -131,15 +156,15 @@ func (s *Server) Start() error {
 }
 
 // Run a listener
-func (s *Server) runListener(listener net.Listener, id int) {
+func (s *Server) runListener(listener listener, id int) {
 
-	log.Printf("IMAP server %d listening on %s", id, listener.Addr().String())
+	log.Printf("IMAP server %d listening on %s", id, listener.listener.Addr().String())
 
 	clientNumber := 1
 
 	for {
 		// Accept a connection from a new client
-		conn, err := listener.Accept()
+		conn, err := listener.listener.Accept()
 		if err != nil {
 			log.Print("IMAP accept error, ", err)
 			continue
@@ -147,14 +172,16 @@ func (s *Server) runListener(listener net.Listener, id int) {
 
 		// Handle the client
 		client := &client{
-			conn:   conn,
-			bufin:  bufio.NewReader(conn),
-			bufout: bufio.NewWriter(conn),
+			conn:     conn,
+			listener: listener,
+			bufin:    bufio.NewReader(conn),
+			bufout:   bufio.NewWriter(conn),
+			// TODO: perhaps we can do this without Sprint, maybe strconv.Itoa()
 			id:     fmt.Sprint(id, "/", clientNumber),
 			config: s.config,
 		}
 
-		go client.handle()
+		go client.handle(s)
 
 		clientNumber += 1
 	}
@@ -162,7 +189,7 @@ func (s *Server) runListener(listener net.Listener, id int) {
 }
 
 // Handle requests from an IMAP client
-func (c *client) handle() {
+func (c *client) handle(s *Server) {
 
 	// Close the client on exit from this function
 	defer c.close()
@@ -188,7 +215,7 @@ func (c *client) handle() {
 	}
 
 	//  Create a session
-	sess := createSession(c.id, c.config)
+	sess := createSession(c.id, c.config, s, &c.listener, c.conn)
 
 	for {
 		// Get the next IMAP command
@@ -196,6 +223,14 @@ func (c *client) handle() {
 
 		// Execute the IMAP command
 		response := command.execute(sess)
+
+		// Possibly replace buffers (layering)
+		if response.bufOutReplacement != nil {
+			c.bufout = response.bufOutReplacement
+		}
+		if response.bufInReplacement != nil {
+			c.bufin = response.bufInReplacement
+		}
 
 		// Write back the response
 		err = response.write(c.bufout)
