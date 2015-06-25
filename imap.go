@@ -3,9 +3,9 @@ package imapsrv
 
 import (
 	"bufio"
+	"fmt"
 	"log"
 	"net"
-	"fmt"
 )
 
 // Default listen interface/port

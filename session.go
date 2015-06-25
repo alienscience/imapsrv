@@ -88,7 +88,7 @@ func (s *session) list(reference []string, pattern []string) ([]*Mailbox, error)
 	}
 
 	// Recursively get a listing
-	return s.depthFirstMailboxes(ret, path, pattern[wildcard:len(pattern)])
+	return s.depthFirstMailboxes(ret, path, pattern[wildcard:])
 }
 
 // Add mailbox information to the given response

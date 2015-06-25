@@ -155,7 +155,7 @@ func (c *list) execute(sess *session) *response {
 	// Convert the reference and mbox pattern into slices
 	ref := pathToSlice(c.reference)
 	mbox := pathToSlice(c.mboxPattern)
-	
+
 	// Get the list of mailboxes
 	mboxes, err := sess.list(ref, mbox)
 
@@ -172,8 +172,8 @@ func (c *list) execute(sess *session) *response {
 	res := ok(c.tag, "LIST completed")
 	for _, mbox := range mboxes {
 		res.extra(fmt.Sprintf(`LIST (%s) "%s" /%s`,
-			joinMailboxFlags(mbox), 
-			string(pathDelimiter), 
+			joinMailboxFlags(mbox),
+			string(pathDelimiter),
 			strings.Join(mbox.Path, string(pathDelimiter))))
 	}
 
@@ -224,7 +224,7 @@ func pathToSlice(path string) []string {
 	// Remove leading and trailing blanks
 	if ret[0] == "" {
 		if len(ret) > 1 {
-			ret = ret[1:len(ret)]
+			ret = ret[1:]
 		} else {
 			return []string{}
 		}
@@ -240,7 +240,7 @@ func pathToSlice(path string) []string {
 	}
 
 	return ret
-		
+
 }
 
 // Return a string of mailbox flags for the given mailbox
