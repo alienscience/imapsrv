@@ -5,7 +5,7 @@ import (
 	"log"
 )
 
-// IMAP session states
+// state is the IMAP session state
 type state int
 
 const (
@@ -14,7 +14,7 @@ const (
 	selected
 )
 
-// An IMAP session
+// Session represents an IMAP session
 type session struct {
 	// The client id
 	id string
@@ -26,7 +26,7 @@ type session struct {
 	config *config
 }
 
-// Create a new IMAP session
+// createSession creates a new IMAP session
 func createSession(id string, config *config) *session {
 	return &session{
 		id:     id,
@@ -34,7 +34,7 @@ func createSession(id string, config *config) *session {
 		config: config}
 }
 
-// Log a message with session information
+// log writes the info messages to the logger with session information
 func (s *session) log(info ...interface{}) {
 	preamble := fmt.Sprintf("IMAP (%s) ", s.id)
 	message := []interface{}{preamble}
@@ -42,7 +42,7 @@ func (s *session) log(info ...interface{}) {
 	log.Print(message...)
 }
 
-// Select a mailbox - returns true if the mailbox exists
+// selectMailbox selects a mailbox - returns true if the mailbox exists
 func (s *session) selectMailbox(path []string) (bool, error) {
 	// Lookup the mailbox
 	mailstore := s.config.mailstore
@@ -61,7 +61,7 @@ func (s *session) selectMailbox(path []string) (bool, error) {
 	return true, nil
 }
 
-// List mailboxes matching the given mailbox pattern
+// list mailboxes matching the given mailbox pattern
 func (s *session) list(reference []string, pattern []string) ([]*Mailbox, error) {
 
 	ret := make([]*Mailbox, 0, 4)
@@ -91,7 +91,7 @@ func (s *session) list(reference []string, pattern []string) ([]*Mailbox, error)
 	return s.depthFirstMailboxes(ret, path, pattern[wildcard:])
 }
 
-// Add mailbox information to the given response
+// addMailboxInfo adds mailbox information to the given response
 func (s *session) addMailboxInfo(resp *response) error {
 	mailstore := s.config.mailstore
 
@@ -121,14 +121,14 @@ func (s *session) addMailboxInfo(resp *response) error {
 	return nil
 }
 
-// Copies a slice
+// copySlice copies a slice
 func copySlice(s []string) []string {
 	ret := make([]string, len(s), (len(s)+1)*2)
 	copy(ret, s)
 	return ret
 }
 
-// Get a recursive mailbox listing
+// depthFirstMailboxes gets a recursive mailbox listing
 // At the moment this doesn't support wildcards such as 'leader%' (are they used in real life?)
 func (s *session) depthFirstMailboxes(
 	results []*Mailbox, path []string, pattern []string) ([]*Mailbox, error) {

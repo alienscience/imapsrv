@@ -8,22 +8,22 @@ import (
 	"net"
 )
 
-// Default listen interface/port
+// DefaultListener is the listener that is used if no listener is specified
 const DefaultListener = "0.0.0.0:143"
 
-// IMAP server configuration
+// config is an IMAP server configuration
 type config struct {
 	maxClients uint
 	listeners  []listener
 	mailstore  Mailstore
 }
 
-// Listener config
+// listener represents a listener as used by the server
 type listener struct {
 	addr string
 }
 
-// An IMAP Server
+// Server is an IMAP Server
 type Server struct {
 	// Server configuration
 	config *config
@@ -31,7 +31,7 @@ type Server struct {
 	activeClients uint
 }
 
-// An IMAP Client as seen by an IMAP server
+// client is an IMAP Client as seen by an IMAP server
 type client struct {
 	conn   net.Conn
 	bufin  *bufio.Reader
@@ -40,7 +40,7 @@ type client struct {
 	config *config
 }
 
-// Return the default server configuration
+// defaultConfig returns the default server configuration
 func defaultConfig() *config {
 	return &config{
 		listeners:  make([]listener, 0, 4),
@@ -48,7 +48,7 @@ func defaultConfig() *config {
 	}
 }
 
-// Add a mailstore to the config
+// Store addd a mailstore to the config
 func Store(m Mailstore) func(*Server) error {
 	return func(s *Server) error {
 		s.config.mailstore = m
@@ -56,7 +56,7 @@ func Store(m Mailstore) func(*Server) error {
 	}
 }
 
-// Add an interface to listen to
+// Listen adds an interface to listen to
 func Listen(Addr string) func(*Server) error {
 	return func(s *Server) error {
 		l := listener{
@@ -67,7 +67,7 @@ func Listen(Addr string) func(*Server) error {
 	}
 }
 
-// Set MaxClients config
+// MaxClients sets the MaxClients config
 func MaxClients(max uint) func(*Server) error {
 	return func(s *Server) error {
 		s.config.maxClients = max
@@ -75,6 +75,7 @@ func MaxClients(max uint) func(*Server) error {
 	}
 }
 
+// NewServer creates a new server with the given options
 func NewServer(options ...func(*Server) error) *Server {
 	// set the default config
 	s := &Server{}
@@ -130,7 +131,7 @@ func (s *Server) Start() error {
 	return nil
 }
 
-// Run a listener
+// runListener runs the given listener on a separate goroutine
 func (s *Server) runListener(listener net.Listener, id int) {
 
 	log.Printf("IMAP server %d listening on %s", id, listener.Addr().String())
@@ -161,7 +162,7 @@ func (s *Server) runListener(listener net.Listener, id int) {
 
 }
 
-// Handle requests from an IMAP client
+// handle requests from an IMAP client
 func (c *client) handle() {
 
 	// Close the client on exit from this function
@@ -212,12 +213,12 @@ func (c *client) handle() {
 	}
 }
 
-// Close an IMAP client
+// close closes an IMAP client
 func (c *client) close() {
 	c.conn.Close()
 }
 
-// Log an error
+// logError sends a log message to the default Logger
 func (c *client) logError(err error) {
 	log.Printf("IMAP client %s, %v", c.id, err)
 }

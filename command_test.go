@@ -13,11 +13,11 @@ func setupTest() (*Server, *session) {
 	return s, sess
 }
 
-// A test mailstore used for unit testing
+// TestMailstore is a dummy mailstore
 type TestMailstore struct {
 }
 
-// Get mailbox information
+// GetMailbox gets dummy Mailbox information
 func (m *TestMailstore) GetMailbox(path []string) (*Mailbox, error) {
 	return &Mailbox{
 		Name: "inbox",
@@ -25,7 +25,7 @@ func (m *TestMailstore) GetMailbox(path []string) (*Mailbox, error) {
 	}, nil
 }
 
-// Get a list of mailboxes at the given path
+// GetMailboxes lists dummy Mailboxes
 func (m *TestMailstore) GetMailboxes(path []string) ([]*Mailbox, error) {
 	if len(path) == 0 {
 		// Root
@@ -54,26 +54,27 @@ func (m *TestMailstore) GetMailboxes(path []string) ([]*Mailbox, error) {
 	}
 }
 
-// Get the sequence number of the first unseen message
+// FirstUnseen gets a dummy number of first unseen messages in an IMAP mailbox
 func (m *TestMailstore) FirstUnseen(mbox int64) (int64, error) {
 	return 4, nil
 }
 
-// Get the total number of messages in an IMAP mailbox
+// TotalMessages gets a dummy number of messages in an IMAP mailbox
 func (m *TestMailstore) TotalMessages(mbox int64) (int64, error) {
 	return 8, nil
 }
 
-// Get the total number of unread messages in an IMAP mailbox
+// RecentMessages gets a dummy number of unread messages in an IMAP mailbox
 func (m *TestMailstore) RecentMessages(mbox int64) (int64, error) {
 	return 4, nil
 }
 
-// Get the next available uid in an IMAP mailbox
+// NextUid gets a dummy next-uid in an IMAP mailbox
 func (m *TestMailstore) NextUid(mbox int64) (int64, error) {
 	return 9, nil
 }
 
+// TestCapabilityCommand tests the correctness of the CAPABILITY command
 func TestCapabilityCommand(t *testing.T) {
 	_, session := setupTest()
 	cap := &capability{tag: "A00001"}
@@ -84,6 +85,7 @@ func TestCapabilityCommand(t *testing.T) {
 	}
 }
 
+// TestLogoutCommand tests the correctness of the LOGOUT command
 func TestLogoutCommand(t *testing.T) {
 	_, session := setupTest()
 	log := &logout{tag: "A00004"}

@@ -6,20 +6,20 @@ import (
 	"strings"
 )
 
-// An IMAP parser
+// parser can parse IMAP commands
 type parser struct {
 	lexer *lexer
 }
 
-// An Error from the IMAP parser or lexer
+// parseError is an Error from the IMAP parser or lexer
 type parseError string
 
-// Parse errors satisfy the error interface
+// Error returns the string representation of the parseError
 func (e parseError) Error() string {
 	return string(e)
 }
 
-// Create an imap parser
+// createParser creates a new IMAP parser, reading from the Reader
 func createParser(in *bufio.Reader) *parser {
 	lexer := createLexer(in)
 	return &parser{lexer: lexer}
@@ -27,7 +27,7 @@ func createParser(in *bufio.Reader) *parser {
 
 //----- Commands ---------------------------------------------------------------
 
-// Parse the next command
+// next attempts to read the next command
 func (p *parser) next() command {
 
 	// All commands start on a new line
@@ -50,7 +50,7 @@ func (p *parser) next() command {
 	case "logout":
 		return p.logout(tag)
 	case "select":
-		return p.selectC(tag)
+		return p.selectCmd(tag)
 	case "list":
 		return p.list(tag)
 	default:
@@ -58,17 +58,17 @@ func (p *parser) next() command {
 	}
 }
 
-// Create a NOOP command
+// noop creates a NOOP command
 func (p *parser) noop(tag string) command {
 	return &noop{tag: tag}
 }
 
-// Create a capability command
+// capability creates a CAPABILITY command
 func (p *parser) capability(tag string) command {
 	return &capability{tag: tag}
 }
 
-// Create a login command
+// login creates a LOGIN command
 func (p *parser) login(tag string) command {
 
 	// Get the command arguments
@@ -79,13 +79,13 @@ func (p *parser) login(tag string) command {
 	return &login{tag: tag, userId: userId, password: password}
 }
 
-// Create a logout command
+// logout creates a LOGOUT command
 func (p *parser) logout(tag string) command {
 	return &logout{tag: tag}
 }
 
-// Create a select command
-func (p *parser) selectC(tag string) command {
+// selectCmd creates a select command
+func (p *parser) selectCmd(tag string) command {
 
 	// Get the mailbox name
 	mailbox := p.expectString(p.lexer.astring)
@@ -93,7 +93,7 @@ func (p *parser) selectC(tag string) command {
 	return &selectMailbox{tag: tag, mailbox: mailbox}
 }
 
-// Create a list command
+// list creates a LIST command
 func (p *parser) list(tag string) command {
 
 	// Get the command arguments
@@ -107,15 +107,15 @@ func (p *parser) list(tag string) command {
 	return &list{tag: tag, reference: reference, mboxPattern: mailbox}
 }
 
-// Create a placeholder for an unknown command
+// unknown creates a placeholder for an unknown command
 func (p *parser) unknown(tag string, cmd string) command {
 	return &unknown{tag: tag, cmd: cmd}
 }
 
 //----- Helper functions -------------------------------------------------------
 
-// Get a string token using the given lexer function
-// If the lexing fails then panic
+// expectString gets a string token using the given lexer function
+// If the lexing fails, then this will panic
 func (p *parser) expectString(lex func() (bool, string)) string {
 	ok, ret := lex()
 	if !ok {

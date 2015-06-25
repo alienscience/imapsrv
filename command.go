@@ -5,36 +5,37 @@ import (
 	"strings"
 )
 
-// An IMAP command
+// command represents an IMAP command
 type command interface {
-	// Execute the command and return an imap response
+	// Execute the command and return an IMAP response
 	execute(s *session) *response
 }
 
-// Path delimiter
 const (
+	// pathDelimiter is the delimiter used to distinguish between different folders
 	pathDelimiter = '/'
 )
 
 //------------------------------------------------------------------------------
 
+// noop is a NOOP command
 type noop struct {
 	tag string
 }
 
-// Execute a noop
+// execute a NOOP command
 func (c *noop) execute(s *session) *response {
 	return ok(c.tag, "NOOP Completed")
 }
 
 //------------------------------------------------------------------------------
 
-// A CAPABILITY command
+// capability is a CAPABILITY command
 type capability struct {
 	tag string
 }
 
-// Execute a capability
+// execute a capability
 func (c *capability) execute(s *session) *response {
 	// The IMAP server is assumed to be running over SSL and so
 	// STARTTLS is not supported and LOGIN is not disabled
@@ -44,14 +45,14 @@ func (c *capability) execute(s *session) *response {
 
 //------------------------------------------------------------------------------
 
-// A LOGIN command
+// login is a LOGIN command
 type login struct {
 	tag      string
 	userId   string
 	password string
 }
 
-// Login command
+// execute a LOGIN command
 func (c *login) execute(sess *session) *response {
 
 	// Has the user already logged in?
@@ -73,12 +74,12 @@ func (c *login) execute(sess *session) *response {
 
 //------------------------------------------------------------------------------
 
-// A LOGOUT command
+// logout is a LOGOUT command
 type logout struct {
 	tag string
 }
 
-// Logout command
+// execute a LOGOUT command
 func (c *logout) execute(sess *session) *response {
 
 	sess.st = notAuthenticated
@@ -89,13 +90,13 @@ func (c *logout) execute(sess *session) *response {
 
 //------------------------------------------------------------------------------
 
-// A SELECT command
+// selectMailbox is a SELECT command
 type selectMailbox struct {
 	tag     string
 	mailbox string
 }
 
-// Select command
+// execute a SELECT command
 func (c *selectMailbox) execute(sess *session) *response {
 
 	// Is the user authenticated?
@@ -129,14 +130,14 @@ func (c *selectMailbox) execute(sess *session) *response {
 
 //------------------------------------------------------------------------------
 
-// A LIST command
+// list is a LIST command
 type list struct {
 	tag         string
 	reference   string // Context of mailbox name
 	mboxPattern string // The mailbox name pattern
 }
 
-// List command
+// execute a LIST command
 func (c *list) execute(sess *session) *response {
 
 	// Is the user authenticated?
@@ -182,13 +183,13 @@ func (c *list) execute(sess *session) *response {
 
 //------------------------------------------------------------------------------
 
-// An unknown/unsupported command
+// unknown is an unknown/unsupported command
 type unknown struct {
 	tag string
 	cmd string
 }
 
-// Report an error for an unknown command
+// execute reports an error for an unknown command
 func (c *unknown) execute(s *session) *response {
 	message := fmt.Sprintf("%s unknown command", c.cmd)
 	s.log(message)
@@ -197,21 +198,21 @@ func (c *unknown) execute(s *session) *response {
 
 //------ Helper functions ------------------------------------------------------
 
-// Log an error and return an response
+// internalError logs an error and return an response
 func internalError(sess *session, tag string, commandName string, err error) *response {
 	message := commandName + " " + err.Error()
 	sess.log(message)
 	return no(tag, message).shouldClose()
 }
 
-// Indicate a command is invalid because the user has not authenticated
+// mustAuthenticate indicates a command is invalid because the user has not authenticated
 func mustAuthenticate(sess *session, tag string, commandName string) *response {
 	message := commandName + " not authenticated"
 	sess.log(message)
 	return bad(tag, message)
 }
 
-// Convert a path to a slice of strings
+// pathToSlice converts a path to a slice of strings
 func pathToSlice(path string) []string {
 
 	// Split the path
@@ -243,7 +244,7 @@ func pathToSlice(path string) []string {
 
 }
 
-// Return a string of mailbox flags for the given mailbox
+// joinMailboxFlags returns a string of mailbox flags for the given mailbox
 func joinMailboxFlags(m *Mailbox) string {
 
 	// Convert the mailbox flags into a slice of strings
