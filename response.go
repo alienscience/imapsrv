@@ -16,6 +16,10 @@ type response struct {
 	untagged []string
 	// Should the connection be closed after the response has been sent?
 	closeConnection bool
+	// bufInReplacement is not-null if all incoming traffic should be read from this instead
+	bufInReplacement *bufio.Reader
+	// bufOutReplacement is not-null if all outgoing traffic should be written to this instead
+	bufOutReplacement *bufio.Writer
 }
 
 // createResponse creates a response
@@ -43,6 +47,11 @@ func no(tag string, message string) *response {
 	return createResponse(tag, "NO", message)
 }
 
+// empty creates an empty response
+func empty() *response {
+	return &response{}
+}
+
 // fatalResponse writes an untagged fatal response (BYE)
 func fatalResponse(w *bufio.Writer, err error) {
 	resp := createResponse("*", "BYE", err.Error())
@@ -62,7 +71,14 @@ func (r *response) shouldClose() *response {
 	return r
 }
 
-// write a response to the given Writer
+// replaceBuffers sets two possible buffers that need replacement
+func (r *response) replaceBuffers(reader *bufio.Reader, writer *bufio.Writer) *response {
+	r.bufInReplacement = reader
+	r.bufOutReplacement = writer
+	return r
+}
+
+// write will write a response to the given writer
 func (r *response) write(w *bufio.Writer) error {
 
 	// Write untagged lines

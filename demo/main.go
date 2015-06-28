@@ -14,7 +14,8 @@ func main() {
 	// More advanced config
 	s := imap.NewServer(
 		imap.Listen("127.0.0.1:1193"),
-		imap.Listen("127.0.0.1:1194"),
+		imap.ListenSTARTTLS("127.0.0.1:1194", "certs/public.pem", "certs/private.pem"),
+		imap.Store(m),
 	)
 
 	err := s.Start()

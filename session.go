@@ -3,6 +3,7 @@ package imapsrv
 import (
 	"fmt"
 	"log"
+	"net"
 )
 
 // state is the IMAP session state
@@ -14,27 +15,33 @@ const (
 	selected
 )
 
-// Session represents an IMAP session
+// session represents an IMAP session
 type session struct {
-	// The client id
+	// id is a unique identifier for this session
 	id string
-	// The state of the session
+	// st indicates the current state of the session
 	st state
-	// The currently selected mailbox (if st == selected)
+	// mailbox is the currently selected mailbox (if st == selected)
 	mailbox *Mailbox
-	// IMAP configuration
+	// config refers to the IMAP configuration
 	config *config
-	// The server the session is for
+	// server refers to the server the session is at
 	server *Server
+	// listener is the listener that's handling this current session
+	listener *listener
+	// conn is the currently active TCP connection
+	conn net.Conn
 }
 
-// createSession creates a new IMAP session
-func createSession(id string, config *config, server *Server) *session {
+// Create a new IMAP session
+func createSession(id string, config *config, server *Server, listener *listener, conn net.Conn) *session {
 	return &session{
-		id:     id,
-		st:     notAuthenticated,
-		config: config,
-		server: server,
+		id:       id,
+		st:       notAuthenticated,
+		config:   config,
+		server:   server,
+		listener: listener,
+		conn:     conn,
 	}
 }
 

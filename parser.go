@@ -45,6 +45,8 @@ func (p *parser) next() command {
 		return p.noop(tag)
 	case "capability":
 		return p.capability(tag)
+	case "starttls":
+		return p.starttls(tag)
 	case "login":
 		return p.login(tag)
 	case "logout":
@@ -77,6 +79,11 @@ func (p *parser) login(tag string) command {
 
 	// Create the command
 	return &login{tag: tag, userId: userId, password: password}
+}
+
+// starttls creates a starttls command
+func (p *parser) starttls(tag string) command {
+	return &starttls{tag: tag, parser: p}
 }
 
 // logout creates a LOGOUT command
