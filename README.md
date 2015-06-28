@@ -6,10 +6,10 @@ This is an IMAP server written in Go. It is a work in progress.
 
 # Demo
 
-In the demo subdirectory is an example IMAP server that starts up on port 1193. To run this server:
+In the demo subdirectory there are several implementation examples available. 
 
 ```
-$ go run ./demo/main.go
+$ go run ./demo/basic/main.go
 ```
 
 You can connect to this server using telnet or netcat. For example:
@@ -47,6 +47,47 @@ To add a new IMAP command the usual steps are:
 2. Add the command and its client interaction to commands.go
 3. Put the main functionality in session.go.
 
+## Current state
+### IMAP ([RFC 3501](https://tools.ietf.org/html/rfc3501))
+### Client Commands - Any state
+- [ ] CAPABILITY command - in progress
+- [x] NOOP command
+- [x] LOGOUT command
+
+### Client Commands - Not-Authenticated State
+- [x] STARTTLS command
+- [ ] AUTHENTICATE command
+- [x] LOGIN command
+
+### Client Commands - Authenticated State
+- [x] SELECT command
+- [ ] EXAMINE command
+- [ ] CREATE command
+- [ ] DELETE command
+- [ ] RENAME command
+- [ ] SUBSCRIBE command
+- [ ] UNSUBSCRIBE command
+- [x] LIST command
+- [ ] LSUB command
+- [ ] STATUS command
+- [ ] APPEND command
+
+### Client Commands - Selected State
+- [ ] CHECK command
+- [ ] CLOSE command
+- [ ] EXPUNGE command
+- [ ] SEARCH command
+- [ ] FETCH command - in progress
+- [ ] STORE command
+- [ ] COPY command
+- [ ] UID command
+
+### Server responses
+- [x] OK response
+- [x] NO response
+- [x] BAD response
+- [ ] PREAUTH response
+- [x] BYE response
 
 # License
 
