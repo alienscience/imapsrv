@@ -194,7 +194,7 @@ func (l *lexer) literal() string {
 
 	for {
 		buffer = append(buffer, c)
-	
+
 		// Is this the end of the literal?
 		length -= 1
 		if length == 0 {

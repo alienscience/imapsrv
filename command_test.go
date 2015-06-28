@@ -3,19 +3,15 @@ package imapsrv
 import "testing"
 import "fmt"
 
-
-
-func setupTest() (*Server,*session){
+func setupTest() (*Server, *session) {
 	m := &TestMailstore{}
 	s := NewServer(
 		Store(m),
 	)
 	//s.Start()
-	sess := createSession(1, s.config)
+	sess := createSession("1", s.config)
 	return s, sess
 }
-
-
 
 // A test mailstore used for unit testing
 type TestMailstore struct {
@@ -34,12 +30,12 @@ func (m *TestMailstore) GetMailboxes(path []string) ([]*Mailbox, error) {
 	if len(path) == 0 {
 		// Root
 		return []*Mailbox{
-			&Mailbox{
+			{
 				Name: "inbox",
 				Path: []string{"inbox"},
 				Id:   1,
 			},
-			&Mailbox{
+			{
 				Name: "spam",
 				Path: []string{"spam"},
 				Id:   2,
@@ -47,7 +43,7 @@ func (m *TestMailstore) GetMailboxes(path []string) ([]*Mailbox, error) {
 		}, nil
 	} else if len(path) == 1 && path[0] == "inbox" {
 		return []*Mailbox{
-			&Mailbox{
+			{
 				Name: "starred",
 				Path: []string{"inbox", "stared"},
 				Id:   3,
@@ -57,7 +53,6 @@ func (m *TestMailstore) GetMailboxes(path []string) ([]*Mailbox, error) {
 		return []*Mailbox{}, nil
 	}
 }
-
 
 // Get the sequence number of the first unseen message
 func (m *TestMailstore) FirstUnseen(mbox int64) (int64, error) {
@@ -79,26 +74,21 @@ func (m *TestMailstore) NextUid(mbox int64) (int64, error) {
 	return 9, nil
 }
 
-
-
-
-func TestCapabilityCommand( t *testing.T){
+func TestCapabilityCommand(t *testing.T) {
 	_, session := setupTest()
 	cap := &capability{tag: "A00001"}
 	resp := cap.execute(session)
-	if (resp.tag != "A00001") || (resp.message != "CAPABILITY completed") || (resp.untagged[0] != "CAPABILITY IMAP4rev1"){
+	if (resp.tag != "A00001") || (resp.message != "CAPABILITY completed") || (resp.untagged[0] != "CAPABILITY IMAP4rev1") {
 		t.Error("Capability Failed - unexpected response.")
 		fmt.Println(resp)
 	}
 }
 
-
-
-func TestLogoutCommand( t *testing.T){
+func TestLogoutCommand(t *testing.T) {
 	_, session := setupTest()
 	log := &logout{tag: "A00004"}
 	resp := log.execute(session)
-	if (resp.tag != "A00004") || (resp.message != "LOGOUT completed") || (resp.untagged[0] != "BYE IMAP4rev1 Server logging out"){
+	if (resp.tag != "A00004") || (resp.message != "LOGOUT completed") || (resp.untagged[0] != "BYE IMAP4rev1 Server logging out") {
 		t.Error("Logout Failed - unexpected response.")
 		fmt.Println(resp)
 	}
