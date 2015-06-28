@@ -3,9 +3,9 @@ package imapsrv
 
 import (
 	"bufio"
+	"crypto/tls"
 	"fmt"
 	"github.com/alienscience/imapsrv/auth"
-	"crypto/tls"
 	"log"
 	"net"
 )
@@ -27,7 +27,7 @@ type option func(*Server) error
 // listener represents a listener as used by the server
 type listener struct {
 	addr         string
-	tls          bool
+	encryption   encryptionLevel
 	certificates []tls.Certificate
 	listener     net.Listener
 }
@@ -89,8 +89,8 @@ func ListenOption(Addr string) option {
 	}
 }
 
-// ListenStartTlsOption enable start tls with the given certificate and keyfile
-func ListenStartTlsOption(Addr, certFile, keyFile string) option {
+// ListenSTARTTLSOoption enables STARTTLS with the given certificate and keyfile
+func ListenSTARTTLSOoption(Addr, certFile, keyFile string) option {
 	return func(s *Server) error {
 		// Load the ceritificates
 		var err error
@@ -103,7 +103,7 @@ func ListenStartTlsOption(Addr, certFile, keyFile string) option {
 		// Set up the listener
 		l := listener{
 			addr:         Addr,
-			tls:          true,
+			encryption:   starttlsLevel,
 			certificates: certs,
 		}
 		s.config.listeners = append(s.config.listeners, l)
@@ -241,11 +241,10 @@ func (c *client) handle(s *Server) {
 		response := command.execute(sess)
 
 		// Possibly replace buffers (layering)
-		if response.bufOutReplacement != nil {
-			c.bufout = response.bufOutReplacement
-		}
-		if response.bufInReplacement != nil {
-			c.bufin = response.bufInReplacement
+		if response.bufReplacement != nil {
+			c.bufout = response.bufReplacement.W
+			c.bufin = response.bufReplacement.R
+			parser.lexer.reader = &response.bufReplacement.Reader
 		}
 
 		// Write back the response

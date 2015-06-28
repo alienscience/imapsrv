@@ -2,6 +2,7 @@ package imapsrv
 
 import (
 	"bufio"
+	"net/textproto"
 )
 
 // response represents an IMAP response
@@ -17,9 +18,7 @@ type response struct {
 	// Should the connection be closed after the response has been sent?
 	closeConnection bool
 	// bufInReplacement is not-null if all incoming traffic should be read from this instead
-	bufInReplacement *bufio.Reader
-	// bufOutReplacement is not-null if all outgoing traffic should be written to this instead
-	bufOutReplacement *bufio.Writer
+	bufReplacement *textproto.Conn
 }
 
 // createResponse creates a response
@@ -72,9 +71,8 @@ func (r *response) shouldClose() *response {
 }
 
 // replaceBuffers sets two possible buffers that need replacement
-func (r *response) replaceBuffers(reader *bufio.Reader, writer *bufio.Writer) *response {
-	r.bufInReplacement = reader
-	r.bufOutReplacement = writer
+func (r *response) replaceBuffers(replacement *textproto.Conn) *response {
+	r.bufReplacement = replacement
 	return r
 }
 

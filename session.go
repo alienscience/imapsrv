@@ -15,6 +15,17 @@ const (
 	selected
 )
 
+type encryptionLevel int
+
+const (
+	// unencryptedLevel indicates an unencrypted / cleartext connection
+	unencryptedLevel encryptionLevel = iota
+	// starttlsLevel indicates that an unencrypted connection can be used to start a TLS connection
+	starttlsLevel
+	// tlsLevel indicates that a secure TLS connection must be set first
+	tlsLevel
+)
+
 // session represents an IMAP session
 type session struct {
 	// id is a unique identifier for this session
@@ -31,6 +42,8 @@ type session struct {
 	listener *listener
 	// conn is the currently active TCP connection
 	conn net.Conn
+	// tls indicates whether or not the communication is encrypted
+	encryption encryptionLevel
 }
 
 // Create a new IMAP session

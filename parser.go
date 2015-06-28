@@ -83,7 +83,7 @@ func (p *parser) login(tag string) command {
 
 // starttls creates a starttls command
 func (p *parser) starttls(tag string) command {
-	return &starttls{tag: tag, parser: p}
+	return &starttls{tag: tag}
 }
 
 // logout creates a LOGOUT command

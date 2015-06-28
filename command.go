@@ -40,17 +40,33 @@ type capability struct {
 
 // execute a capability
 func (c *capability) execute(s *session) *response {
-	// The IMAP server is assumed to be running over SSL and so
-	// STARTTLS is not supported and LOGIN is not disabled
+	var commands []string
+
+	switch s.listener.encryption {
+	case unencryptedLevel:
+		// TODO: do we want to support this?
+
+	case starttlsLevel:
+		if s.encryption == tlsLevel {
+			commands = append(commands, "AUTH=PLAIN")
+		} else {
+			commands = append(commands, "STARTTLS")
+			commands = append(commands, "LOGINDISABLED")
+		}
+
+	case tlsLevel:
+		commands = append(commands, "AUTH=PLAIN")
+	}
+
+	// Return all capabilities
 	return ok(c.tag, "CAPABILITY completed").
-		extra("CAPABILITY IMAP4rev1 STARTTLS")
+		extra("CAPABILITY IMAP4rev1 " + strings.Join(commands, " "))
 }
 
 //------------------------------------------------------------------------------
 
 type starttls struct {
-	tag    string
-	parser *parser
+	tag string
 }
 
 func (c *starttls) execute(sess *session) *response {
@@ -59,10 +75,8 @@ func (c *starttls) execute(sess *session) *response {
 	sess.conn = tls.Server(sess.conn, &tls.Config{Certificates: sess.listener.certificates})
 	textConn := textproto.NewConn(sess.conn)
 
-	// replace current lexer reader
-	c.parser.lexer.reader = &textConn.Reader
-
-	return empty().replaceBuffers(textConn.R, textConn.W)
+	sess.encryption = tlsLevel
+	return empty().replaceBuffers(textConn)
 }
 
 //------------------------------------------------------------------------------

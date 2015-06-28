@@ -6,13 +6,11 @@ import (
 )
 
 func main() {
-	// This server listens on two different ports, and with a non-default Mailstore
-	m := &imap.DummyMailstore{}
+	// This server listens on two different ports
 
 	s := imap.NewServer(
 		imap.ListenOption("127.0.0.1:1193"),
 		imap.ListenOption("127.0.0.1:1194"),
-		imap.StoreOption(m),
 	)
 
 	err := s.Start()

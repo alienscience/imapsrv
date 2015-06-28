@@ -9,7 +9,6 @@ import (
 
 func main() {
 	// This server uses boltDb for its authentication, adding a test user
-	m := &imap.DummyMailstore{}
 
 	// Create a file for the BoltAuthStore - in production this should probably NOT be a temporary file (!)
 	tmpFile, err := ioutil.TempFile("", "imap_")
@@ -29,7 +28,6 @@ func main() {
 	// Put everything together
 	s := imap.NewServer(
 		imap.ListenOption("127.0.0.1:1193"),
-		imap.StoreOption(m),
 		imap.AuthStoreOption(a),
 	)
 
