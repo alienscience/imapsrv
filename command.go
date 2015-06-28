@@ -1,8 +1,10 @@
 package imapsrv
 
 import (
+	"crypto/tls"
 	"fmt"
 	"log"
+	"net/textproto"
 	"strings"
 )
 
@@ -41,7 +43,26 @@ func (c *capability) execute(s *session) *response {
 	// The IMAP server is assumed to be running over SSL and so
 	// STARTTLS is not supported and LOGIN is not disabled
 	return ok(c.tag, "CAPABILITY completed").
-		extra("CAPABILITY IMAP4rev1")
+		extra("CAPABILITY IMAP4rev1 STARTTLS")
+}
+
+//------------------------------------------------------------------------------
+
+type starttls struct {
+	tag    string
+	parser *parser
+}
+
+func (c *starttls) execute(sess *session) *response {
+	sess.conn.Write([]byte(fmt.Sprintf("%s Begin TLS negotiation now", c.tag)))
+
+	sess.conn = tls.Server(sess.conn, &tls.Config{Certificates: sess.listener.certificates})
+	textConn := textproto.NewConn(sess.conn)
+
+	// replace current lexer reader
+	c.parser.lexer.reader = &textConn.Reader
+
+	return empty().replaceBuffers(textConn.R, textConn.W)
 }
 
 //------------------------------------------------------------------------------

@@ -9,7 +9,7 @@ func setupTest() (*Server, *session) {
 		Store(m),
 	)
 	//s.Start()
-	sess := createSession(1, s.config, s)
+	sess := createSession("1", s.config, s, nil, nil) // TODO: listener and net.Conn
 	return s, sess
 }
 
@@ -79,7 +79,8 @@ func TestCapabilityCommand(t *testing.T) {
 	_, session := setupTest()
 	cap := &capability{tag: "A00001"}
 	resp := cap.execute(session)
-	if (resp.tag != "A00001") || (resp.message != "CAPABILITY completed") || (resp.untagged[0] != "CAPABILITY IMAP4rev1") {
+	// TODO: STARTTLS shouldn't always be available? (i.e. after using STARTTLS)
+	if (resp.tag != "A00001") || (resp.message != "CAPABILITY completed") || (resp.untagged[0] != "CAPABILITY IMAP4rev1 STARTTLS") {
 		t.Error("Capability Failed - unexpected response.")
 		fmt.Println(resp)
 	}
