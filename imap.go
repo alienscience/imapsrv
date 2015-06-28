@@ -172,7 +172,7 @@ func (s *Server) Start() error {
 }
 
 // runListener runs the given listener on a separate goroutine
-func (s *Server) runListener(listener net.Listener, id int) {
+func (s *Server) runListener(listener listener, id int) {
 
 	log.Printf("IMAP server %d listening on %s", id, listener.listener.Addr().String())
 
