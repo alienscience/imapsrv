@@ -9,7 +9,7 @@ func setupTest() (*Server, *session) {
 		Store(m),
 	)
 	//s.Start()
-	sess := createSession("1", s.config)
+	sess := createSession(1, s.config, s)
 	return s, sess
 }
 

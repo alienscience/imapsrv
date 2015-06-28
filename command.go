@@ -2,6 +2,7 @@ package imapsrv
 
 import (
 	"fmt"
+	"log"
 	"strings"
 )
 
@@ -62,11 +63,12 @@ func (c *login) execute(sess *session) *response {
 		return bad(c.tag, message)
 	}
 
-	// TODO: implement login
-	if c.userId == "test" {
+	auth, err := sess.server.config.authBackend.Authenticate(c.userId, c.password)
+	if auth {
 		sess.st = authenticated
 		return ok(c.tag, "LOGIN completed")
 	}
+	log.Println("Login request:", auth, err)
 
 	// Fail by default
 	return no(c.tag, "LOGIN failure")

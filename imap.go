@@ -4,6 +4,7 @@ package imapsrv
 import (
 	"bufio"
 	"fmt"
+	"auth"
 	"log"
 	"net"
 )
@@ -16,7 +17,11 @@ type config struct {
 	maxClients uint
 	listeners  []listener
 	mailstore  Mailstore
+
+	authBackend auth.AuthStore
 }
+
+type option func(*Server) error
 
 // listener represents a listener as used by the server
 type listener struct {
@@ -48,16 +53,25 @@ func defaultConfig() *config {
 	}
 }
 
-// Store addd a mailstore to the config
-func Store(m Mailstore) func(*Server) error {
+// Add a mailstore to the config
+// StoreOption add a mailstore to the config
+func StoreOption(m Mailstore) option {
 	return func(s *Server) error {
 		s.config.mailstore = m
 		return nil
 	}
 }
 
-// Listen adds an interface to listen to
-func Listen(Addr string) func(*Server) error {
+// AuthStoreOption adds an authenticaton backend
+func AuthStoreOption(a auth.AuthStore) option {
+	return func(s *Server) error {
+		s.config.authBackend = a
+		return nil
+	}
+}
+
+// ListenOption adds an interface to listen to
+func ListenOption(Addr string) option {
 	return func(s *Server) error {
 		l := listener{
 			addr: Addr,
@@ -67,8 +81,8 @@ func Listen(Addr string) func(*Server) error {
 	}
 }
 
-// MaxClients sets the MaxClients config
-func MaxClients(max uint) func(*Server) error {
+// MaxClientsOption sets the MaxClients config
+func MaxClientsOption(max uint) option {
 	return func(s *Server) error {
 		s.config.maxClients = max
 		return nil
@@ -76,7 +90,7 @@ func MaxClients(max uint) func(*Server) error {
 }
 
 // NewServer creates a new server with the given options
-func NewServer(options ...func(*Server) error) *Server {
+func NewServer(options ...option) *Server {
 	// set the default config
 	s := &Server{}
 	s.config = defaultConfig()
@@ -155,7 +169,7 @@ func (s *Server) runListener(listener net.Listener, id int) {
 			config: s.config,
 		}
 
-		go client.handle()
+		go client.handle(s)
 
 		clientNumber += 1
 	}
@@ -163,7 +177,7 @@ func (s *Server) runListener(listener net.Listener, id int) {
 }
 
 // handle requests from an IMAP client
-func (c *client) handle() {
+func (c *client) handle(s *Server) {
 
 	// Close the client on exit from this function
 	defer c.close()
@@ -189,7 +203,7 @@ func (c *client) handle() {
 	}
 
 	//  Create a session
-	sess := createSession(c.id, c.config)
+	sess := createSession(c.id, c.config, s)
 
 	for {
 		// Get the next IMAP command

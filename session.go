@@ -9,7 +9,7 @@ import (
 type state int
 
 const (
-	notAuthenticated = iota
+	notAuthenticated state = iota
 	authenticated
 	selected
 )
@@ -24,14 +24,18 @@ type session struct {
 	mailbox *Mailbox
 	// IMAP configuration
 	config *config
+	// The server the session is for
+	server *Server
 }
 
 // createSession creates a new IMAP session
-func createSession(id string, config *config) *session {
+func createSession(id string, config *config, server *Server) *session {
 	return &session{
 		id:     id,
 		st:     notAuthenticated,
-		config: config}
+		config: config,
+		server: server,
+	}
 }
 
 // log writes the info messages to the logger with session information
