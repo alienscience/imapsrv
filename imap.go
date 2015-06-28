@@ -4,7 +4,7 @@ package imapsrv
 import (
 	"bufio"
 	"fmt"
-	"auth"
+	"github.com/alienscience/imapsrv/auth"
 	"log"
 	"net"
 )
