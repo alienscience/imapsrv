@@ -20,6 +20,8 @@ type config struct {
 	mailstore  Mailstore
 
 	authBackend auth.AuthStore
+
+	lmtpEndpoints []string
 }
 
 type option func(*Server) error
@@ -41,7 +43,7 @@ type Server struct {
 }
 
 // client is an IMAP Client as seen by an IMAP server
-type client struct {
+type imapClient struct {
 	// conn is the lowest-level connection layer
 	conn net.Conn
 	// listener refers to the listener that's handling this client
@@ -154,6 +156,11 @@ func (s *Server) Start() error {
 		}
 	}
 
+	// Start the LMTP entrypoints as desired
+	for i, entrypoint := range s.config.lmtpEndpoints {
+		go s.runLMTPListener(entrypoint, i)
+	}
+
 	// Start the server on each port
 	n := len(s.config.listeners)
 	for i := 0; i < n; i += 1 {
@@ -187,7 +194,7 @@ func (s *Server) runListener(listener listener, id int) {
 		}
 
 		// Handle the client
-		client := &client{
+		client := &imapClient{
 			conn:     conn,
 			listener: listener,
 			bufin:    bufio.NewReader(conn),
@@ -205,7 +212,7 @@ func (s *Server) runListener(listener listener, id int) {
 }
 
 // handle requests from an IMAP client
-func (c *client) handle(s *Server) {
+func (c *imapClient) handle(s *Server) {
 
 	// Close the client on exit from this function
 	defer c.close()
@@ -263,11 +270,11 @@ func (c *client) handle(s *Server) {
 }
 
 // close closes an IMAP client
-func (c *client) close() {
+func (c *imapClient) close() {
 	c.conn.Close()
 }
 
 // logError sends a log message to the default Logger
-func (c *client) logError(err error) {
+func (c *imapClient) logError(err error) {
 	log.Printf("IMAP client %s, %v", c.id, err)
 }

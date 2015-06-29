@@ -11,7 +11,7 @@ func main() {
 
 	s := imap.NewServer(
 		imap.ListenOption("127.0.0.1:1193"), // optionally also listen to non-STARTTLS ports
-		imap.ListenSTARTTLSOoption("127.0.0.1:1194", "demo/starttls/public.pem", "demo/starttls/private.pem"),
+		imap.ListenSTARTTLSOoption("127.0.0.1:1194", "demo/certificates/public.pem", "demo/certificates/private.pem"),
 	)
 
 	fmt.Println("Starting server, you can test by doing:\n",
