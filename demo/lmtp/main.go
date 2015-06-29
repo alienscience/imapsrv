@@ -6,13 +6,16 @@ import (
 
 func main() {
 	// This package allows to receive e-mail using the LMTP protocol,
-	// and allowing STARTTLS to connect to the imap server.
+	// and allowing STARTTLS to connect to the IMAP server.
 
-	lmtp := imap.LMTPOption("/tmp/imapsrv-lmtp")
+	// Any of these two will do:
+	sock := imap.LMTPOptionSocket("/tmp/imapsrv-lmtp")
+	tcp := imap.LMTPOptionTCP("localhost:61194")
 
 	s := imap.NewServer(
 		imap.ListenSTARTTLSOoption("127.0.0.1:1194", "demo/certificates/public.pem", "demo/certificates/private.pem"),
-		lmtp,
+		sock,
+		tcp,
 	)
 	s.Start()
 }

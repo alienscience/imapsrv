@@ -8,6 +8,10 @@ import (
 	"github.com/alienscience/imapsrv/auth"
 	"log"
 	"net"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 )
 
 // DefaultListener is the listener that is used if no listener is specified
@@ -21,7 +25,10 @@ type config struct {
 
 	authBackend auth.AuthStore
 
-	lmtpEndpoints []string
+	lmtpEndpoints []lmtpEntryPoint
+
+	// hostname is the hostname of this entire server
+	hostname string
 }
 
 type option func(*Server) error
@@ -40,6 +47,10 @@ type Server struct {
 	config *config
 	// Number of active clients
 	activeClients uint
+	// sockets
+	sockets []net.Listener
+	// socketsMu ensures that multiple goroutines can access the sockets list
+	socketsMu sync.Mutex
 }
 
 // client is an IMAP Client as seen by an IMAP server
@@ -154,6 +165,9 @@ func (s *Server) Start() error {
 			log.Printf("IMAP cannot listen on %s, %v", iface.addr, err)
 			return err
 		}
+		s.socketsMu.Lock()
+		s.sockets = append(s.sockets, s.config.listeners[i].listener)
+		s.socketsMu.Unlock()
 	}
 
 	// Start the LMTP entrypoints as desired
@@ -162,17 +176,18 @@ func (s *Server) Start() error {
 	}
 
 	// Start the server on each port
-	n := len(s.config.listeners)
-	for i := 0; i < n; i += 1 {
-		listener := s.config.listeners[i]
+	for i, listener := range s.config.listeners {
+		go s.runListener(listener, i)
+	}
 
-		// Start each listener in a separate go routine
-		// except for the last one
-		if i < n-1 {
-			go s.runListener(listener, i)
-		} else {
-			s.runListener(listener, i)
+	// Wait for sigkill, so we can terminate this server
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	for range c {
+		for _, sock := range s.sockets {
+			sock.Close()
 		}
+		os.Exit(0)
 	}
 
 	return nil
@@ -180,7 +195,6 @@ func (s *Server) Start() error {
 
 // runListener runs the given listener on a separate goroutine
 func (s *Server) runListener(listener listener, id int) {
-
 	log.Printf("IMAP server %d listening on %s", id, listener.listener.Addr().String())
 
 	clientNumber := 1
@@ -189,7 +203,7 @@ func (s *Server) runListener(listener listener, id int) {
 		// Accept a connection from a new client
 		conn, err := listener.listener.Accept()
 		if err != nil {
-			log.Print("IMAP accept error, ", err)
+			log.Printf("IMAP accept error at %d, %v", id, err)
 			continue
 		}
 
