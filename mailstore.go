@@ -1,15 +1,40 @@
 package imapsrv
 
 import (
-	"log"
+	"io"
+	"time"
 )
 
-// Mailbox represents an IMAP mailbox
-type Mailbox struct {
-	Name  string   // The name of the mailbox
-	Path  []string // Full mailbox path
-	Id    int64    // The id of the mailbox
-	Flags uint8    // Mailbox flags
+// A service that is needed to read mail messages
+type Mailstore interface {
+	// Get IMAP mailbox information
+	// Returns nil if the mailbox does not exist
+	Mailbox(path []string) (Mailbox, error)
+	// Get a list of mailboxes at the given path
+	Mailboxes(path []string) ([]Mailbox, error)
+}
+
+// An IMAP mailbox
+// The mailbox must be able to handle uids. Sequence numbers are handled by imapsrv.
+type Mailbox interface {
+	// Get the path of the mailbox
+	Path() []string
+	// Get the mailbox flags
+	Flags() (uint8, error)
+	// Get the uid validity value
+	UidValidity() (int32, error)
+	// Get the next available uid in the mailbox
+	NextUid() (int32, error)
+	// Get a list of all the uids in the mailbox
+	AllUids() ([]int32, error)
+	// Get the uid of the first unseen message
+	FirstUnseen() (int32, error)
+	// Get the total number of messages
+	TotalMessages() (int32, error)
+	// Get the total number of unread messages
+	RecentMessages() (int32, error)
+	// Fetch the message with the given UID
+	Fetch(uid int32) (Message, error)
 }
 
 // Mailbox flags
@@ -39,83 +64,46 @@ var mailboxFlags = map[uint8]string{
 	Unmarked:    "Unmarked",
 }
 
-// Mailstore is a service responsible for I/O with the actual e-mails
-type Mailstore interface {
-	// GetMailbox gets IMAP mailbox information
-	// Returns nil if the mailbox does not exist
-	GetMailbox(path []string) (*Mailbox, error)
-	// GetMailboxes gets a list of mailboxes at the given path
-	GetMailboxes(path []string) ([]*Mailbox, error)
-	// FirstUnseen gets the sequence number of the first unseen message in an IMAP mailbox
-	FirstUnseen(mbox int64) (int64, error)
-	// TotalMessages gets the total number of messages in an IMAP mailbox
-	TotalMessages(mbox int64) (int64, error)
-	// RecentMessages gets the total number of unread messages in an IMAP mailbox
-	RecentMessages(mbox int64) (int64, error)
-	// NextUid gets the next available uid in an IMAP mailbox
-	NextUid(mbox int64) (int64, error)
+// A message is read through this interface
+type MessageReader interface {
+	io.Reader
+	io.Seeker
+	io.Closer
 }
 
-// DummyMailstore is used for demonstrating the IMAP server
-type dummyMailstore struct {
+// An IMAP message
+type Message interface {
+	// Get the message flags
+	Flags() (uint8, error)
+	// Get the date of the message as known by the server
+	InternalDate() (time.Time, error)
+	// Get the size of the message in bytes
+	Size() (uint32, error)
+	// Get a reader to access the message content
+	Reader() (MessageReader, error)
 }
 
-// GetMailbox gets mailbox information
-func (m *dummyMailstore) GetMailbox(path []string) (*Mailbox, error) {
-	return &Mailbox{
-		Name: "inbox",
-		Path: []string{"inbox"},
-		Id:   1,
-	}, nil
-}
+// Message flags
+const (
+	// The message has been read
+	Seen = 1 << iota
+	// The message has been answered
+	Answered
+	// The message has been flagged for urgent/special attention
+	Flagged
+	// The message has been marked for removal by EXPUNGE
+	Deleted
+	// The message is imcomplete and is being worked on
+	Draft
+	// The message has recently arrived in the mailbox
+	Recent
+)
 
-// GetMailboxes gets a list of mailboxes at the given path
-func (m *dummyMailstore) GetMailboxes(path []string) ([]*Mailbox, error) {
-	log.Printf("GetMailboxes %v", path)
-
-	if len(path) == 0 {
-		// Root
-		return []*Mailbox{
-			{
-				Name: "inbox",
-				Path: []string{"inbox"},
-				Id:   1,
-			},
-			{
-				Name: "spam",
-				Path: []string{"spam"},
-				Id:   2,
-			},
-		}, nil
-	} else if len(path) == 1 && path[0] == "inbox" {
-		return []*Mailbox{
-			{
-				Name: "starred",
-				Path: []string{"inbox", "stared"},
-				Id:   3,
-			},
-		}, nil
-	} else {
-		return []*Mailbox{}, nil
-	}
-}
-
-// FirstUnseen gets the sequence number of the first unseen message in an IMAP mailbox
-func (m *dummyMailstore) FirstUnseen(mbox int64) (int64, error) {
-	return 4, nil
-}
-
-// TotalMessages gets the total number of messages in an IMAP mailbox
-func (m *dummyMailstore) TotalMessages(mbox int64) (int64, error) {
-	return 8, nil
-}
-
-// RecentMessages gets the total number of unread messages in an IMAP mailbox
-func (m *dummyMailstore) RecentMessages(mbox int64) (int64, error) {
-	return 4, nil
-}
-
-// DummyMailstore gets the next available uid in an IMAP mailbox
-func (m *dummyMailstore) NextUid(mbox int64) (int64, error) {
-	return 9, nil
+var messageFlags = map[uint8]string{
+	Seen:     `\Seen`,
+	Answered: `\Answered`,
+	Flagged:  `\Flagged`,
+	Deleted:  `\Deleted`,
+	Draft:    `\Draft`,
+	Recent:   `\Recent`,
 }

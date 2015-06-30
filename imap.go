@@ -8,6 +8,7 @@ import (
 	"github.com/alienscience/imapsrv/auth"
 	"log"
 	"net"
+	"net/textproto"
 	"os"
 	"os/signal"
 	"sync"
@@ -18,17 +19,21 @@ import (
 const DefaultListener = "0.0.0.0:143"
 
 // config is an IMAP server configuration
-type config struct {
-	maxClients uint
-	listeners  []listener
-	mailstore  Mailstore
+type Config struct {
+	MaxClients uint
+	Listeners  []listener
+	Mailstore  Mailstore
 
-	authBackend auth.AuthStore
+	AuthBackend auth.AuthStore
 
-	lmtpEndpoints []lmtpEntryPoint
+	LmtpEndpoints []lmtpEntryPoint
 
-	// hostname is the hostname of this entire server
-	hostname string
+	// Hostname is the hostname of this entire server
+	Hostname string
+
+	// Production indicates whether or not this is used in production
+	// - disabling this allows for the program to panic
+	Production bool
 }
 
 type option func(*Server) error
@@ -44,7 +49,7 @@ type listener struct {
 // Server is an IMAP Server
 type Server struct {
 	// Server configuration
-	config *config
+	config *Config
 	// Number of active clients
 	activeClients uint
 	// sockets
@@ -63,14 +68,14 @@ type imapClient struct {
 	bufin  *bufio.Reader
 	bufout *bufio.Writer
 	id     string
-	config *config
+	config *Config
 }
 
 // defaultConfig returns the default server configuration
-func defaultConfig() *config {
-	return &config{
-		listeners:  make([]listener, 0, 4),
-		maxClients: 8,
+func defaultConfig() *Config {
+	return &Config{
+		Listeners:  make([]listener, 0, 4),
+		MaxClients: 8,
 	}
 }
 
@@ -78,7 +83,7 @@ func defaultConfig() *config {
 // StoreOption add a mailstore to the config
 func StoreOption(m Mailstore) option {
 	return func(s *Server) error {
-		s.config.mailstore = m
+		s.config.Mailstore = m
 		return nil
 	}
 }
@@ -86,7 +91,7 @@ func StoreOption(m Mailstore) option {
 // AuthStoreOption adds an authenticaton backend
 func AuthStoreOption(a auth.AuthStore) option {
 	return func(s *Server) error {
-		s.config.authBackend = a
+		s.config.AuthBackend = a
 		return nil
 	}
 }
@@ -97,7 +102,7 @@ func ListenOption(Addr string) option {
 		l := listener{
 			addr: Addr,
 		}
-		s.config.listeners = append(s.config.listeners, l)
+		s.config.Listeners = append(s.config.Listeners, l)
 		return nil
 	}
 }
@@ -119,7 +124,7 @@ func ListenSTARTTLSOoption(Addr, certFile, keyFile string) option {
 			encryption:   starttlsLevel,
 			certificates: certs,
 		}
-		s.config.listeners = append(s.config.listeners, l)
+		s.config.Listeners = append(s.config.Listeners, l)
 		return nil
 	}
 }
@@ -127,7 +132,7 @@ func ListenSTARTTLSOoption(Addr, certFile, keyFile string) option {
 // MaxClientsOption sets the MaxClients config
 func MaxClientsOption(max uint) option {
 	return func(s *Server) error {
-		s.config.maxClients = max
+		s.config.MaxClients = max
 		return nil
 	}
 }
@@ -152,31 +157,31 @@ func NewServer(options ...option) *Server {
 // Start an IMAP server
 func (s *Server) Start() error {
 	// Use a default listener if none exist
-	if len(s.config.listeners) == 0 {
-		s.config.listeners = append(s.config.listeners,
+	if len(s.config.Listeners) == 0 {
+		s.config.Listeners = append(s.config.Listeners,
 			listener{addr: DefaultListener})
 	}
 
 	var err error
 	// Start listening for IMAP connections
-	for i, iface := range s.config.listeners {
-		s.config.listeners[i].listener, err = net.Listen("tcp", iface.addr)
+	for i, iface := range s.config.Listeners {
+		s.config.Listeners[i].listener, err = net.Listen("tcp", iface.addr)
 		if err != nil {
 			log.Printf("IMAP cannot listen on %s, %v", iface.addr, err)
 			return err
 		}
 		s.socketsMu.Lock()
-		s.sockets = append(s.sockets, s.config.listeners[i].listener)
+		s.sockets = append(s.sockets, s.config.Listeners[i].listener)
 		s.socketsMu.Unlock()
 	}
 
 	// Start the LMTP entrypoints as desired
-	for i, entrypoint := range s.config.lmtpEndpoints {
+	for i, entrypoint := range s.config.LmtpEndpoints {
 		go s.runLMTPListener(entrypoint, i)
 	}
 
 	// Start the server on each port
-	for i, listener := range s.config.listeners {
+	for i, listener := range s.config.Listeners {
 		go s.runListener(listener, i)
 	}
 
@@ -234,9 +239,16 @@ func (c *imapClient) handle(s *Server) {
 	// Handle parser panics gracefully
 	defer func() {
 		if e := recover(); e != nil {
-			err := e.(parseError)
-			c.logError(err)
-			fatalResponse(c.bufout, err)
+			if err, ok := e.(parseError); ok {
+				c.logError(err)
+				fatalResponse(c.bufout, err)
+			} else {
+				if s.config.Production {
+					log.Println("Panic:", e)
+				} else {
+					panic(e)
+				}
+			}
 		}
 	}()
 
@@ -244,7 +256,7 @@ func (c *imapClient) handle(s *Server) {
 	parser := createParser(c.bufin)
 
 	// Write the welcome message
-	err := ok("*", "IMAP4rev1 Service Ready").write(c.bufout)
+	err := ok("*", "IMAP4rev1 Service Ready").writeTo(c.bufout)
 
 	if err != nil {
 		c.logError(err)
@@ -258,29 +270,52 @@ func (c *imapClient) handle(s *Server) {
 		// Get the next IMAP command
 		command := parser.next()
 
-		// Execute the IMAP command
-		response := command.execute(sess)
-
-		// Possibly replace buffers (layering)
-		if response.bufReplacement != nil {
-			c.bufout = response.bufReplacement.W
-			c.bufin = response.bufReplacement.R
-			parser.lexer.reader = &response.bufReplacement.Reader
+		// Execute the IMAP command and finish when requested
+		if open, newBuffers := c.execute(command, sess); !open {
+			break
+		} else if newBuffers != nil {
+			c.bufin = newBuffers.Reader.R
+			c.bufout = newBuffers.Writer.W
+			parser.lexer.reader.R = newBuffers.R
 		}
+	}
+}
 
-		// Write back the response
-		err = response.write(c.bufout)
+// Execute an IMAP command in the given session
+// Returns true if execution can continue, false if not
+func (c *imapClient) execute(cmd command, sess *session) (keepOpen bool, newBuffers *textproto.Conn) {
+
+	// Create an output channel
+	ch := make(chan response)
+
+	// Execute the command in the background
+	// TODO: (AlienScience) support concurrent command execution
+	// TODO: (EtienneBruines) what would need to be fixed in order to support that?
+	go cmd.execute(sess, ch)
+
+	keepOpen = true
+
+	// Output the responses
+	for r := range ch {
+		err := r.writeTo(c.bufout)
+
+		if final, ok := r.(*finalResponse); ok {
+			newBuffers = final.bufReplacement
+		}
 
 		if err != nil {
 			c.logError(err)
-			return
+			keepOpen = false
 		}
 
 		// Should the connection be closed?
-		if response.closeConnection {
-			return
+		if r.isClose() {
+			keepOpen = false
 		}
+
 	}
+
+	return
 }
 
 // close closes an IMAP client

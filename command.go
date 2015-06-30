@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"log"
+	"math"
 	"net/textproto"
 	"strings"
 )
@@ -11,12 +12,27 @@ import (
 // command represents an IMAP command
 type command interface {
 	// Execute the command and return an IMAP response
-	execute(s *session) *response
+	execute(s *session, out chan response)
 }
 
 const (
 	// pathDelimiter is the delimiter used to distinguish between different folders
+	// Imap lets the server choose the path delimiter
 	pathDelimiter = '/'
+	// A sequence number value specifying the largest sequence number in use
+	largestSequenceNumber = math.MaxInt32
+)
+
+// Message flags
+type messageFlag int
+
+const (
+	answered = iota
+	flagged
+	deleted
+	seen
+	draft
+	recent
 )
 
 //------------------------------------------------------------------------------
@@ -26,9 +42,10 @@ type noop struct {
 	tag string
 }
 
-// execute a NOOP command
-func (c *noop) execute(s *session) *response {
-	return ok(c.tag, "NOOP Completed")
+// Execute a noop
+func (c *noop) execute(s *session, out chan response) {
+	defer close(out)
+	out <- ok(c.tag, "NOOP Completed")
 }
 
 //------------------------------------------------------------------------------
@@ -39,7 +56,8 @@ type capability struct {
 }
 
 // execute a capability
-func (c *capability) execute(s *session) *response {
+func (c *capability) execute(s *session, out chan response) {
+	defer close(out)
 	var commands []string
 
 	switch s.listener.encryption {
@@ -59,8 +77,8 @@ func (c *capability) execute(s *session) *response {
 	}
 
 	// Return all capabilities
-	return ok(c.tag, "CAPABILITY completed").
-		extra("CAPABILITY IMAP4rev1 " + strings.Join(commands, " "))
+	out <- ok(c.tag, "CAPABILITY completed").
+		putLine("CAPABILITY IMAP4rev1 " + strings.Join(commands, " "))
 }
 
 //------------------------------------------------------------------------------
@@ -69,14 +87,16 @@ type starttls struct {
 	tag string
 }
 
-func (c *starttls) execute(sess *session) *response {
+func (c *starttls) execute(sess *session, out chan response) {
+	defer close(out)
+
 	sess.conn.Write([]byte(fmt.Sprintf("%s Begin TLS negotiation now", c.tag)))
 
 	sess.conn = tls.Server(sess.conn, &tls.Config{Certificates: sess.listener.certificates})
 	textConn := textproto.NewConn(sess.conn)
 
 	sess.encryption = tlsLevel
-	return empty().replaceBuffers(textConn)
+	out <- empty().shouldReplaceBuffers(textConn)
 }
 
 //------------------------------------------------------------------------------
@@ -88,25 +108,28 @@ type login struct {
 	password string
 }
 
-// execute a LOGIN command
-func (c *login) execute(sess *session) *response {
+// Login command
+func (c *login) execute(sess *session, out chan response) {
+	defer close(out)
 
 	// Has the user already logged in?
 	if sess.st != notAuthenticated {
 		message := "LOGIN already logged in"
 		sess.log(message)
-		return bad(c.tag, message)
+		out <- bad(c.tag, message)
+		return
 	}
 
-	auth, err := sess.server.config.authBackend.Authenticate(c.userId, c.password)
+	auth, err := sess.server.config.AuthBackend.Authenticate(c.userId, c.password)
 	if auth {
 		sess.st = authenticated
-		return ok(c.tag, "LOGIN completed")
+		out <- ok(c.tag, "LOGIN completed")
+		return
 	}
 	log.Println("Login request:", auth, err)
 
 	// Fail by default
-	return no(c.tag, "LOGIN failure")
+	out <- no(c.tag, "LOGIN failure")
 }
 
 //------------------------------------------------------------------------------
@@ -117,12 +140,13 @@ type logout struct {
 }
 
 // execute a LOGOUT command
-func (c *logout) execute(sess *session) *response {
+func (c *logout) execute(sess *session, out chan response) {
+	defer close(out)
 
 	sess.st = notAuthenticated
-	return ok(c.tag, "LOGOUT completed").
-		extra("BYE IMAP4rev1 Server logging out").
-		shouldClose()
+	out <- ok(c.tag, "LOGOUT completed").
+		shouldClose().
+		putLine("BYE IMAP4rev1 Server logging out")
 }
 
 //------------------------------------------------------------------------------
@@ -134,11 +158,13 @@ type selectMailbox struct {
 }
 
 // execute a SELECT command
-func (c *selectMailbox) execute(sess *session) *response {
+func (c *selectMailbox) execute(sess *session, out chan response) {
+	defer close(out)
 
 	// Is the user authenticated?
 	if sess.st != authenticated {
-		return mustAuthenticate(sess, c.tag, "SELECT")
+		out <- mustAuthenticate(sess, c.tag, "SELECT")
+		return
 	}
 
 	// Select the mailbox
@@ -146,11 +172,13 @@ func (c *selectMailbox) execute(sess *session) *response {
 	exists, err := sess.selectMailbox(mbox)
 
 	if err != nil {
-		return internalError(sess, c.tag, "SELECT", err)
+		out <- internalError(sess, c.tag, "SELECT", err)
+		return
 	}
 
 	if !exists {
-		return no(c.tag, "SELECT No such mailbox")
+		out <- no(c.tag, "SELECT No such mailbox")
+		return
 	}
 
 	// Build a response that includes mailbox information
@@ -159,10 +187,11 @@ func (c *selectMailbox) execute(sess *session) *response {
 	err = sess.addMailboxInfo(res)
 
 	if err != nil {
-		return internalError(sess, c.tag, "SELECT", err)
+		out <- internalError(sess, c.tag, "SELECT", err)
+		return
 	}
 
-	return res
+	out <- res
 }
 
 //------------------------------------------------------------------------------
@@ -175,19 +204,22 @@ type list struct {
 }
 
 // execute a LIST command
-func (c *list) execute(sess *session) *response {
+func (c *list) execute(sess *session, out chan response) {
+	defer close(out)
 
 	// Is the user authenticated?
 	if sess.st != authenticated {
-		return mustAuthenticate(sess, c.tag, "LIST")
+		out <- mustAuthenticate(sess, c.tag, "LIST")
+		return
 	}
 
 	// Is the mailbox pattern empty? This indicates that we should return
 	// the delimiter and the root name of the reference
 	if c.mboxPattern == "" {
 		res := ok(c.tag, "LIST completed")
-		res.extra(fmt.Sprintf(`LIST () "%s" %s`, pathDelimiter, c.reference))
-		return res
+		res.putLine(fmt.Sprintf(`LIST () "%s" %s`, pathDelimiter, c.reference))
+		out <- res
+		return
 	}
 
 	// Convert the reference and mbox pattern into slices
@@ -198,24 +230,107 @@ func (c *list) execute(sess *session) *response {
 	mboxes, err := sess.list(ref, mbox)
 
 	if err != nil {
-		return internalError(sess, c.tag, "LIST", err)
+		out <- internalError(sess, c.tag, "LIST", err)
+		return
 	}
 
 	// Check for an empty response
 	if len(mboxes) == 0 {
-		return no(c.tag, "LIST no results")
+		out <- no(c.tag, "LIST no results")
+		return
 	}
 
 	// Respond with the mailboxes
 	res := ok(c.tag, "LIST completed")
 	for _, mbox := range mboxes {
-		res.extra(fmt.Sprintf(`LIST (%s) "%s" /%s`,
+		res.putLine(fmt.Sprintf(`LIST (%s) "%s" /%s`,
 			joinMailboxFlags(mbox),
 			string(pathDelimiter),
-			strings.Join(mbox.Path, string(pathDelimiter))))
+			strings.Join(mbox.provider.Path(), string(pathDelimiter))))
 	}
 
-	return res
+	out <- res
+}
+
+//------------------------------------------------------------------------------
+
+// A FETCH command
+type fetch struct {
+	tag         string
+	macro       fetchCommandMacro
+	sequenceSet []sequenceRange
+	attachments []fetchAttachment
+}
+
+// Fetch macros
+type fetchCommandMacro int
+
+const (
+	noFetchMacro = iota
+	allFetchMacro
+	fullFetchMacro
+	fastFetchMacro
+)
+
+// Sequence range, end can be nil to specify a sequence number
+type sequenceRange struct {
+	start int32
+	end   *int32
+}
+
+// Creating a fetch command requires a constructor
+func createFetchCommand(tag string) *fetch {
+	return &fetch{
+		tag:         tag,
+		macro:       noFetchMacro,
+		sequenceSet: make([]sequenceRange, 0, 4),
+		attachments: make([]fetchAttachment, 0, 4),
+	}
+}
+
+// Fetch command
+func (c *fetch) execute(sess *session, out chan response) {
+	defer close(out)
+
+	// Is the user authenticated?
+	if sess.st != authenticated {
+		out <- mustAuthenticate(sess, c.tag, "FETCH")
+		return
+	}
+
+	// If there is a fetch macro - convert it into fetch attachments
+	c.expandMacro()
+
+	// Loop through the sequence ranges to fetch
+	for _, seqRange := range c.sequenceSet {
+
+		// Loop through the sequence range
+		i := seqRange.start
+		for {
+			// Add the start of the response
+			resp := partial()
+			resp.put(fmt.Sprint(i, " FETCH"))
+
+			// Execute the fetch command
+			err := sess.fetch(resp, i, c.attachments)
+
+			if err != nil {
+				out <- internalError(sess, c.tag, "FETCH", err)
+				return
+			}
+
+			// Output the current fetch
+			out <- resp
+
+			// Is this the last value in the range?
+			i += 1
+			if seqRange.end == nil || i > *seqRange.end {
+				break
+			}
+		}
+	}
+
+	out <- ok(c.tag, "FETCH completed")
 }
 
 //------------------------------------------------------------------------------
@@ -227,23 +342,25 @@ type unknown struct {
 }
 
 // execute reports an error for an unknown command
-func (c *unknown) execute(s *session) *response {
+func (c *unknown) execute(s *session, out chan response) {
+	defer close(out)
+
 	message := fmt.Sprintf("%s unknown command", c.cmd)
 	s.log(message)
-	return bad(c.tag, message)
+	out <- bad(c.tag, message)
 }
 
 //------ Helper functions ------------------------------------------------------
 
 // internalError logs an error and return an response
-func internalError(sess *session, tag string, commandName string, err error) *response {
+func internalError(sess *session, tag string, commandName string, err error) *finalResponse {
 	message := commandName + " " + err.Error()
 	sess.log(message)
 	return no(tag, message).shouldClose()
 }
 
 // mustAuthenticate indicates a command is invalid because the user has not authenticated
-func mustAuthenticate(sess *session, tag string, commandName string) *response {
+func mustAuthenticate(sess *session, tag string, commandName string) *finalResponse {
 	message := commandName + " not authenticated"
 	sess.log(message)
 	return bad(tag, message)
@@ -282,17 +399,52 @@ func pathToSlice(path string) []string {
 }
 
 // joinMailboxFlags returns a string of mailbox flags for the given mailbox
-func joinMailboxFlags(m *Mailbox) string {
+func joinMailboxFlags(m *mailboxWrap) string {
 
 	// Convert the mailbox flags into a slice of strings
-	flags := make([]string, 0, 4)
+	ret := make([]string, 0, 4)
+
+	flags, _ := m.provider.Flags()
 
 	for flag, str := range mailboxFlags {
-		if m.Flags&flag != 0 {
-			flags = append(flags, str)
+		if flags&flag != 0 {
+			ret = append(ret, str)
 		}
 	}
 
 	// Return a joined string
-	return strings.Join(flags, ",")
+	return strings.Join(ret, ",")
+}
+
+// Expand a fetch macro into fetch attachments
+func (c *fetch) expandMacro() {
+
+	switch c.macro {
+	case allFetchMacro:
+		atts := []fetchAttachment{
+			&flagsFetchAtt{},
+			&internalDateFetchAtt{},
+			&rfc822SizeFetchAtt{},
+			&envelopeFetchAtt{},
+		}
+		c.attachments = atts
+	case fastFetchMacro:
+		atts := []fetchAttachment{
+			&flagsFetchAtt{},
+			&internalDateFetchAtt{},
+			&rfc822SizeFetchAtt{},
+		}
+		c.attachments = atts
+	case fullFetchMacro:
+		atts := []fetchAttachment{
+			&flagsFetchAtt{},
+			&internalDateFetchAtt{},
+			&rfc822SizeFetchAtt{},
+			&envelopeFetchAtt{},
+			&bodyFetchAtt{},
+		}
+		c.attachments = atts
+	default:
+		// Do no macro expansion
+	}
 }

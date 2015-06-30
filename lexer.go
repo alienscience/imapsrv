@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/textproto"
 	"strconv"
+	"strings"
 )
 
 // lexer is responsible for reading input, and making sense of it
@@ -16,7 +17,9 @@ type lexer struct {
 	line []byte
 	// The index to the current character
 	idx int
-	// The start of tokens, used for rewinding to the previous token
+	// The start of tokens, used for rewinding to the previous
+	// token. The lexer does not rewind tokens itself, this is left
+	// to the parser.
 	tokens []int
 }
 
@@ -28,13 +31,20 @@ const (
 	space            = 0x20
 	doubleQuote      = 0x22
 	plus             = 0x2b
+	comma            = 0x2c
+	minus            = 0x2d
+	dot              = 0x2e
 	zero             = 0x30
 	nine             = 0x39
+	colon            = 0x3a
 	leftCurly        = 0x7b
 	rightCurly       = 0x7d
 	leftParenthesis  = 0x28
 	rightParenthesis = 0x29
-	rightBracket     = 0x5d
+	ltChar           = 0x3c
+	gtChar           = 0x3e
+	leftBracketChar  = 0x5b
+	rightBracketChar = 0x5d
 	percent          = 0x25
 	asterisk         = 0x2a
 	backslash        = 0x5c
@@ -68,7 +78,7 @@ var listMailboxExceptionsChar = []byte{
 	space,
 	leftParenthesis,
 	rightParenthesis,
-	rightBracket,
+	rightBracketChar,
 	backslash,
 	leftCurly,
 }
@@ -105,7 +115,249 @@ func (l *lexer) listMailbox() (bool, string) {
 	return l.generalString("LIST-MAILBOX", listMailboxExceptionsChar)
 }
 
+// An integer
+func (l *lexer) integer() (bool, int32) {
+	l.startToken()
+
+	// Read a sequence of digits with sign
+	buffer := make([]byte, 0, 8)
+
+	current := l.current()
+
+	for current >= zero && current <= nine || current == minus {
+		buffer = append(buffer, current)
+		current = l.consume()
+	}
+
+	// Check that at least one character was read
+	if len(buffer) == 0 {
+		return false, 0
+	}
+
+	// Convert to a number
+	num, err := strconv.ParseInt(string(buffer), 10, 32)
+	if err != nil {
+		return false, 0
+	}
+
+	return true, int32(num)
+
+}
+
+// A non-zero integer
+func (l *lexer) nonZeroInteger() (bool, uint32) {
+
+	l.startToken()
+
+	// Read a sequence of digits
+	buffer := make([]byte, 0, 8)
+
+	current := l.current()
+
+	for current >= zero && current <= nine {
+		buffer = append(buffer, current)
+		current = l.consume()
+	}
+
+	// Check that at least one digit was read
+	if len(buffer) == 0 {
+		return false, 0
+	}
+
+	// Convert to a number
+	num, err := strconv.ParseUint(string(buffer), 10, 32)
+	if err != nil {
+		return false, 0
+	}
+
+	return true, uint32(num)
+}
+
+// A sequence range separator
+func (l *lexer) sequenceRangeSeparator() bool {
+	if l.current() == colon {
+		l.consume()
+		return true
+	}
+
+	return false
+}
+
+// A sequence set delimiter
+func (l *lexer) sequenceDelimiter() bool {
+	if l.current() == comma {
+		l.consume()
+		return true
+	}
+
+	return false
+}
+
+// A sequence wildcard
+func (l *lexer) sequenceWildcard() bool {
+	if l.current() == asterisk {
+		l.consume()
+		return true
+	}
+
+	return false
+}
+
+// A fetch macro
+func (l *lexer) fetchMacro() (bool, fetchCommandMacro) {
+	l.skipSpace()
+	l.startToken()
+
+	ok, word := l.asciiWord()
+	if !ok {
+		return false, noFetchMacro
+	}
+
+	// Convert the word to a fetch macro
+	lcWord := strings.ToLower(word)
+
+	switch lcWord {
+	case "all":
+		return ok, allFetchMacro
+	case "full":
+		return ok, fullFetchMacro
+	case "fast":
+		return ok, fastFetchMacro
+	default:
+		return false, noFetchMacro
+	}
+}
+
+// A fetch attachment
+func (l *lexer) fetchAttachment() (bool, fetchAttachment) {
+	l.skipSpace()
+	l.startToken()
+
+	ok, word := l.dottedWord()
+
+	if !ok {
+		return false, nil
+	}
+
+	// Convert the word to a fetch attachment
+	lcWord := strings.ToLower(word)
+
+	switch lcWord {
+	case "envelope":
+		return ok, &envelopeFetchAtt{}
+	case "flags":
+		return ok, &flagsFetchAtt{}
+	case "internaldate":
+		return ok, &internalDateFetchAtt{}
+	case "rfc822.header":
+		return ok, &rfc822HeaderFetchAtt{}
+	case "rfc822.size":
+		return ok, &rfc822SizeFetchAtt{}
+	case "rfc822.text":
+		return ok, &rfc822TextFetchAtt{}
+	case "body":
+		// The parser will decide if this is BODY followed by section
+		return ok, &bodyFetchAtt{}
+	case "bodystructure":
+		return ok, &bodyStructureFetchAtt{}
+	case "uid":
+		return ok, &uidFetchAtt{}
+	case "body.peek":
+		return ok, &bodyPeekFetchAtt{}
+	default:
+		return false, nil
+	}
+
+}
+
+// A fetch attachment
+func (l *lexer) partSpecifier() (bool, partSpecifier) {
+	l.skipSpace()
+	l.startToken()
+
+	ok, word := l.dottedWord()
+	if !ok {
+		return false, invalidPart
+	}
+
+	// Convert the word to a part specifier
+	lcWord := strings.ToLower(word)
+
+	switch lcWord {
+	case "header":
+		return ok, headerPart
+	case "header.fields":
+		return ok, headerFieldsPart
+	case "header.fields.not":
+		return ok, headerFieldsNotPart
+	case "text":
+		return ok, textPart
+	default:
+		return false, invalidPart
+	}
+
+}
+
+// The word "MIME"
+func (l *lexer) mime() bool {
+	l.skipSpace()
+	l.startToken()
+
+	ok, word := l.asciiWord()
+
+	if ok && word == "MIME" {
+		return true
+	}
+
+	return false
+}
+
+// A left parenthesis
+func (l *lexer) leftParen() bool {
+	return l.singleChar(leftParenthesis)
+}
+
+// A right parenthesis
+func (l *lexer) rightParen() bool {
+	return l.singleChar(rightParenthesis)
+}
+
+// A less than
+func (l *lexer) lessThan() bool {
+	return l.singleChar(ltChar)
+}
+
+// A greater than
+func (l *lexer) greaterThan() bool {
+	return l.singleChar(gtChar)
+}
+
+// A left [
+func (l *lexer) leftBracket() bool {
+	return l.singleChar(leftBracketChar)
+}
+
+// A right ]
+func (l *lexer) rightBracket() bool {
+	return l.singleChar(rightBracketChar)
+}
+
+// A .
+func (l *lexer) dot() bool {
+	return l.singleChar(dot)
+}
+
 //-------- IMAP token helper functions -----------------------------------------
+
+// singleChar looks for a single 8-bit character and say if it was successful or not
+func (l *lexer) singleChar(ch byte) bool {
+	if l.current() == ch {
+		l.consume()
+		return true
+	}
+
+	return false
+}
 
 // generalString handles a string that can be bare, a literal or quoted
 func (l *lexer) generalString(name string, exceptions []byte) (bool, string) {
@@ -230,20 +482,60 @@ func (l *lexer) nonquoted(name string, exceptions []byte) (bool, string) {
 	return true, string(buffer)
 }
 
+// A word containing only ascii letters
+func (l *lexer) asciiWord() (bool, string) {
+
+	buffer := make([]byte, 0, 8)
+
+	// Get the current byte
+	c := l.current()
+
+	for (c > 0x40 && c < 0x5b) || (c > 0x60 && c < 0x7b) {
+
+		buffer = append(buffer, c)
+		c = l.consume()
+	}
+
+	// Check that characters were consumed
+	if len(buffer) == 0 {
+		return false, ""
+	}
+
+	return true, string(buffer)
+}
+
+// Alpha-numeric containing dots, e.g a fetch attachment word
+func (l *lexer) dottedWord() (bool, string) {
+
+	buffer := make([]byte, 0, 16)
+
+	c := l.current()
+
+	// Uppercase alphanumeric or a dot
+	for (c > 0x40 && c < 0x5b) || (c > 0x30 && c < 0x3a) || c == dot {
+
+		buffer = append(buffer, c)
+		c = l.consume()
+	}
+
+	// Check that characters were consumed
+	if len(buffer) == 0 {
+		return false, ""
+	}
+
+	return true, string(buffer)
+}
+
 //-------- Low level lexer functions -------------------------------------------
 
 // consume a single byte and return the new character
 // Does not go through newlines
 func (l *lexer) consume() byte {
 
-	// Is there any line left?
-	if l.idx >= len(l.line)-1 {
-		// Return linefeed
-		return lf
+	// Move to the next byte if possible
+	if l.idx < len(l.line) {
+		l.idx += 1
 	}
-
-	// Move to the next byte
-	l.idx += 1
 	return l.current()
 }
 
@@ -252,7 +544,7 @@ func (l *lexer) consume() byte {
 func (l *lexer) consumeAll() byte {
 
 	// Is there any line left?
-	if l.idx >= len(l.line)-1 {
+	if l.idx >= len(l.line) {
 		l.newLine()
 		return l.current()
 	}
@@ -264,7 +556,12 @@ func (l *lexer) consumeAll() byte {
 
 // current gets the current byte
 func (l *lexer) current() byte {
-	return l.line[l.idx]
+	if l.idx < len(l.line) {
+		return l.line[l.idx]
+	}
+
+	// Return linefeed if there are no characters left
+	return lf
 }
 
 // newLine moves onto a new line
@@ -298,6 +595,15 @@ func (l *lexer) startToken() {
 
 // pushBack moves back one token
 func (l *lexer) pushBack() {
+	if l.idx < 1 {
+		panic(parseError("pushBack called on first character of line"))
+	}
+
+	l.idx -= 1
+}
+
+// Move back one token
+func (l *lexer) pushBackToken() {
 	last := len(l.tokens) - 1
 	l.idx = l.tokens[last]
 	l.tokens = l.tokens[:last]

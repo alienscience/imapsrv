@@ -32,10 +32,8 @@ type session struct {
 	id string
 	// st indicates the current state of the session
 	st state
-	// mailbox is the currently selected mailbox (if st == selected)
-	mailbox *Mailbox
 	// config refers to the IMAP configuration
-	config *config
+	config *Config
 	// server refers to the server the session is at
 	server *Server
 	// listener is the listener that's handling this current session
@@ -44,10 +42,12 @@ type session struct {
 	conn net.Conn
 	// tls indicates whether or not the communication is encrypted
 	encryption encryptionLevel
+	// mailbox is the currently selected mailbox (if st == selected)
+	mailbox *mailboxWrap
 }
 
 // Create a new IMAP session
-func createSession(id string, config *config, server *Server, listener *listener, conn net.Conn) *session {
+func createSession(id string, config *Config, server *Server, listener *listener, conn net.Conn) *session {
 	return &session{
 		id:       id,
 		st:       notAuthenticated,
@@ -69,8 +69,8 @@ func (s *session) log(info ...interface{}) {
 // selectMailbox selects a mailbox - returns true if the mailbox exists
 func (s *session) selectMailbox(path []string) (bool, error) {
 	// Lookup the mailbox
-	mailstore := s.config.mailstore
-	mbox, err := mailstore.GetMailbox(path)
+	mailstore := s.config.Mailstore
+	mbox, err := getMailbox(mailstore, path)
 
 	if err != nil {
 		return false, err
@@ -86,9 +86,9 @@ func (s *session) selectMailbox(path []string) (bool, error) {
 }
 
 // list mailboxes matching the given mailbox pattern
-func (s *session) list(reference []string, pattern []string) ([]*Mailbox, error) {
+func (s *session) list(reference []string, pattern []string) ([]*mailboxWrap, error) {
 
-	ret := make([]*Mailbox, 0, 4)
+	ret := make([]*mailboxWrap, 0, 4)
 	path := copySlice(reference)
 
 	// Build a path that does not have wildcards
@@ -103,7 +103,7 @@ func (s *session) list(reference []string, pattern []string) ([]*Mailbox, error)
 
 	// Just return a single mailbox if there are no wildcards
 	if wildcard == -1 {
-		mbox, err := s.config.mailstore.GetMailbox(path)
+		mbox, err := getMailbox(s.config.Mailstore, path)
 		if err != nil {
 			return ret, err
 		}
@@ -115,33 +115,64 @@ func (s *session) list(reference []string, pattern []string) ([]*Mailbox, error)
 	return s.depthFirstMailboxes(ret, path, pattern[wildcard:])
 }
 
-// addMailboxInfo adds mailbox information to the given response
-func (s *session) addMailboxInfo(resp *response) error {
-	mailstore := s.config.mailstore
+// Fetch a mail message with the given sequence number
+func (s *session) fetch(
+	resp *partialResponse,
+	seqnum int32,
+	attachments []fetchAttachment) error {
+
+	// Fetch the message
+	mailbox := s.mailbox
+	msg, err := mailbox.fetch(seqnum)
+	if err != nil {
+		return err
+	}
+
+	// Extract the fetch attachments
+	for _, att := range attachments {
+		err := att.extract(resp, msg)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+//---- Helper functions --------------------------------------------------------
+
+// Add mailbox information to the given response
+func (s *session) addMailboxInfo(resp *finalResponse) error {
+
+	mailbox := s.mailbox.provider
 
 	// Get the mailbox information from the mailstore
-	firstUnseen, err := mailstore.FirstUnseen(s.mailbox.Id)
+	firstUnseen, err := mailbox.FirstUnseen()
 	if err != nil {
 		return err
 	}
-	totalMessages, err := mailstore.TotalMessages(s.mailbox.Id)
+	totalMessages, err := mailbox.TotalMessages()
 	if err != nil {
 		return err
 	}
-	recentMessages, err := mailstore.RecentMessages(s.mailbox.Id)
+	recentMessages, err := mailbox.RecentMessages()
 	if err != nil {
 		return err
 	}
-	nextUid, err := mailstore.NextUid(s.mailbox.Id)
+	nextUid, err := mailbox.NextUid()
+	if err != nil {
+		return err
+	}
+	uidValidity, err := mailbox.UidValidity()
 	if err != nil {
 		return err
 	}
 
-	resp.extra(fmt.Sprint(totalMessages, " EXISTS"))
-	resp.extra(fmt.Sprint(recentMessages, " RECENT"))
-	resp.extra(fmt.Sprintf("OK [UNSEEN %d] Message %d is first unseen", firstUnseen, firstUnseen))
-	resp.extra(fmt.Sprintf("OK [UIDVALIDITY %d] UIDs valid", s.mailbox.Id))
-	resp.extra(fmt.Sprintf("OK [UIDNEXT %d] Predicted next UID", nextUid))
+	resp.put(fmt.Sprint(totalMessages, " EXISTS"))
+	resp.put(fmt.Sprint(recentMessages, " RECENT"))
+	resp.put(fmt.Sprintf("OK [UNSEEN %d] Message %d is first unseen", firstUnseen, firstUnseen))
+	resp.put(fmt.Sprintf("OK [UIDVALIDITY %d] UIDs valid", uidValidity))
+	resp.put(fmt.Sprintf("OK [UIDNEXT %d] Predicted next UID", nextUid))
 	return nil
 }
 
@@ -155,9 +186,9 @@ func copySlice(s []string) []string {
 // depthFirstMailboxes gets a recursive mailbox listing
 // At the moment this doesn't support wildcards such as 'leader%' (are they used in real life?)
 func (s *session) depthFirstMailboxes(
-	results []*Mailbox, path []string, pattern []string) ([]*Mailbox, error) {
+	results []*mailboxWrap, path []string, pattern []string) ([]*mailboxWrap, error) {
 
-	mailstore := s.config.mailstore
+	mailstore := s.config.Mailstore
 
 	// Stop recursing if the pattern is empty or if the path is too long
 	if len(pattern) == 0 || len(path) > 20 {
@@ -172,12 +203,13 @@ func (s *session) depthFirstMailboxes(
 	switch pat {
 	case "%":
 		// Get all the mailboxes at the current path
-		all, err := mailstore.GetMailboxes(path)
+		all, err := getMailboxes(mailstore, path)
 		if err == nil {
 			for _, mbox := range all {
 				// Consider the next pattern
 				ret = append(ret, mbox)
-				ret, err = s.depthFirstMailboxes(ret, mbox.Path, pattern[1:])
+				ret, err = s.depthFirstMailboxes(
+					ret, mbox.provider.Path(), pattern[1:])
 				if err != nil {
 					break
 				}
@@ -186,12 +218,13 @@ func (s *session) depthFirstMailboxes(
 
 	case "*":
 		// Get all the mailboxes at the current path
-		all, err := mailstore.GetMailboxes(path)
+		all, err := getMailboxes(mailstore, path)
 		if err == nil {
 			for _, mbox := range all {
 				// Keep using this pattern
 				ret = append(ret, mbox)
-				ret, err = s.depthFirstMailboxes(ret, mbox.Path, pattern)
+				ret, err = s.depthFirstMailboxes(
+					ret, mbox.provider.Path(), pattern)
 				if err != nil {
 					break
 				}
@@ -200,10 +233,11 @@ func (s *session) depthFirstMailboxes(
 
 	default:
 		// Not a wildcard pattern
-		mbox, err := mailstore.GetMailbox(path)
+		mbox, err := getMailbox(mailstore, path)
 		if err == nil {
 			ret = append(results, mbox)
-			ret, err = s.depthFirstMailboxes(ret, mbox.Path, pattern)
+			ret, err = s.depthFirstMailboxes(
+				ret, mbox.provider.Path(), pattern)
 		}
 	}
 

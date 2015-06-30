@@ -41,23 +41,23 @@ type lmtpEntryPoint struct {
 
 func LMTPOptionSocket(loc string) func(*Server) error {
 	return func(s *Server) error {
-		s.config.lmtpEndpoints = append(s.config.lmtpEndpoints, lmtpEntryPoint{true, loc})
+		s.config.LmtpEndpoints = append(s.config.LmtpEndpoints, lmtpEntryPoint{true, loc})
 		return nil
 	}
 }
 
 func LMTPOptionTCP(addr string) func(*Server) error {
 	return func(s *Server) error {
-		s.config.lmtpEndpoints = append(s.config.lmtpEndpoints, lmtpEntryPoint{false, addr})
+		s.config.LmtpEndpoints = append(s.config.LmtpEndpoints, lmtpEntryPoint{false, addr})
 		return nil
 	}
 }
 
 func (s *Server) runLMTPListener(entrypoint lmtpEntryPoint, number int) {
 	// Add hostname to responses
-	lmtpStatusReady = fmt.Sprintf(lmtpStatusReady, s.config.hostname)
-	lmtpStatusClosing = fmt.Sprintf(lmtpStatusClosing, s.config.hostname)
-	lmtpStatusLHLO = fmt.Sprintf(lmtpStatusLHLO, s.config.hostname)
+	lmtpStatusReady = fmt.Sprintf(lmtpStatusReady, s.config.Hostname)
+	lmtpStatusClosing = fmt.Sprintf(lmtpStatusClosing, s.config.Hostname)
+	lmtpStatusLHLO = fmt.Sprintf(lmtpStatusLHLO, s.config.Hostname)
 
 	var listener net.Listener
 
@@ -132,7 +132,7 @@ func (c *lmtpClient) handle(s *Server) {
 	}
 
 	// Write the welcome message
-	writeLine(lmtpStatusReady, c.session.rw.W)
+	writeSimpleLine(lmtpStatusReady, c.session.rw.W)
 
 	for {
 		if c.session.receivingData {
@@ -140,12 +140,12 @@ func (c *lmtpClient) handle(s *Server) {
 			data, err := c.session.rw.ReadDotBytes()
 			if err != nil {
 				log.Println("Error while reading raw data:", err)
-				writeLine(lmtpStatusProcessingError, c.session.rw.W)
+				writeSimpleLine(lmtpStatusProcessingError, c.session.rw.W)
 				continue
 			}
 
 			c.session.receivingData = false
-			writeLine("250 OK", c.session.rw.W)
+			writeSimpleLine("250 OK", c.session.rw.W)
 
 			// TODO: we should now process the session,
 			// before continuing (or else it gets lost forever)
@@ -161,7 +161,7 @@ func (c *lmtpClient) handle(s *Server) {
 			tags := strings.Fields(line)
 			output := c.session.process(tags, line)
 
-			writeLine(output, c.session.rw.W)
+			writeSimpleLine(output, c.session.rw.W)
 
 			if c.session.closing {
 				return // thereby closing the connection
@@ -222,7 +222,7 @@ func (sess *lmtpSession) process(tags []string, line string) string {
 	}
 }
 
-func writeLine(mes string, w *bufio.Writer) {
+func writeSimpleLine(mes string, w *bufio.Writer) {
 	_, err := w.WriteString(mes + "\r\n")
 	if err != nil {
 		log.Println("Error while writing", err)

@@ -13,7 +13,11 @@ func setupTest() (*Server, *session) {
 	return s, sess
 }
 
+<<<<<<< HEAD
 // TestMailstore is a dummy mailstore
+=======
+// A test mailstore used for unit testing
+>>>>>>> 75ae96c167db938c48a3dc89a25c3f6faf216b35
 type TestMailstore struct {
 }
 
@@ -54,7 +58,11 @@ func (m *TestMailstore) GetMailboxes(path []string) ([]*Mailbox, error) {
 	}
 }
 
+<<<<<<< HEAD
 // FirstUnseen gets a dummy number of first unseen messages in an IMAP mailbox
+=======
+// Get the sequence number of the first unseen message
+>>>>>>> 75ae96c167db938c48a3dc89a25c3f6faf216b35
 func (m *TestMailstore) FirstUnseen(mbox int64) (int64, error) {
 	return 4, nil
 }
@@ -74,19 +82,29 @@ func (m *TestMailstore) NextUid(mbox int64) (int64, error) {
 	return 9, nil
 }
 
+<<<<<<< HEAD
 // TestCapabilityCommand tests the correctness of the CAPABILITY command
+=======
+>>>>>>> 75ae96c167db938c48a3dc89a25c3f6faf216b35
 func TestCapabilityCommand(t *testing.T) {
 	_, session := setupTest()
 	cap := &capability{tag: "A00001"}
 	resp := cap.execute(session)
+<<<<<<< HEAD
 	// TODO: STARTTLS shouldn't always be available? (i.e. after using STARTTLS)
 	if (resp.tag != "A00001") || (resp.message != "CAPABILITY completed") || (resp.untagged[0] != "CAPABILITY IMAP4rev1 STARTTLS") {
+=======
+	if (resp.tag != "A00001") || (resp.message != "CAPABILITY completed") || (resp.untagged[0] != "CAPABILITY IMAP4rev1") {
+>>>>>>> 75ae96c167db938c48a3dc89a25c3f6faf216b35
 		t.Error("Capability Failed - unexpected response.")
 		fmt.Println(resp)
 	}
 }
 
+<<<<<<< HEAD
 // TestLogoutCommand tests the correctness of the LOGOUT command
+=======
+>>>>>>> 75ae96c167db938c48a3dc89a25c3f6faf216b35
 func TestLogoutCommand(t *testing.T) {
 	_, session := setupTest()
 	log := &logout{tag: "A00004"}
