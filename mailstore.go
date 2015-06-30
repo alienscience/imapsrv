@@ -12,6 +12,8 @@ type Mailstore interface {
 	Mailbox(path []string) (Mailbox, error)
 	// Get a list of mailboxes at the given path
 	Mailboxes(path []string) ([]Mailbox, error)
+	// NewMessage adds the raw message information to the server, in the correct location
+	NewMessage(message io.Reader) (Message, error)
 }
 
 // An IMAP mailbox

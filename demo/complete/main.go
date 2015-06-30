@@ -3,6 +3,7 @@ package main
 import (
 	imap "github.com/alienscience/imapsrv"
 	"github.com/alienscience/imapsrv/auth/boltstore"
+	"github.com/alienscience/imapsrv/mailstore/boltmail"
 	"io/ioutil"
 	"log"
 )
@@ -16,17 +17,24 @@ func main() {
 		log.Fatalln("Could not create tempfile:", err)
 	}
 	// Initialize authentication backend
-	a, err := boltstore.NewBoltAuthStore(tmpFile.Name())
+	authStore, err := boltstore.NewBoltAuthStore(tmpFile.Name() + "_authstore")
 	if err != nil {
 		log.Fatalln("Could not create BoltAuthStore:", err)
 	}
 	// Add a user
-	a.CreateUser("test@example.com", "password")
+	authStore.CreateUser("test@example.com", "password")
+
+	mailStore, err := boltmail.NewBoltMailstore(tmpFile.Name() + "_mailstore")
+	if err != nil {
+		log.Fatalln("Could not create BoltMailstore:", err)
+	}
 
 	// Put everything together
 	s := imap.NewServer(
 		// AUTH
-		imap.AuthStoreOption(a),
+		imap.AuthStoreOption(authStore),
+		// Mailstore
+		imap.StoreOption(mailStore),
 		// IMAP
 		imap.ListenOption("127.0.0.1:1193"),
 		imap.ListenSTARTTLSOoption("127.0.0.1:1194", "demo/certificates/public.pem", "demo/certificates/private.pem"),
