@@ -18,6 +18,8 @@ type mailboxWrap struct {
 
 // A wrapper around a Message the provides parsing functions
 type messageWrap struct {
+	// The uid of the message
+	uid int32
 	// The user provided message
 	provider Message
 	// A parsed version of the message, nil if the message has not been parsed
@@ -75,7 +77,9 @@ func (m *mailboxWrap) fetch(seqnum int32) (*messageWrap, error) {
 	}
 
 	// Wrap and return the message
-	return &messageWrap{provider: msg}, nil
+	return &messageWrap{
+		uid: uid,
+		provider: msg}, nil
 }
 
 // Get the Uid for the given sequence number

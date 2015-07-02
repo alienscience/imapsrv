@@ -1,9 +1,11 @@
 package imapsrv
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"github.com/jhillyerd/go.enmime"
+	"io"
 	"mime"
 	"strings"
 )
@@ -191,6 +193,52 @@ type bodySectionFetchAtt struct {
 }
 
 func (a *bodySectionFetchAtt) extract(resp response, msg *messageWrap) error {
+	mime, err := msg.getMime()
+	if err != nil {
+		return err
+	}
+
+	currentSection := mime.Root
+	fs := a.fetchSection
+
+	// Go to the requested section
+	for i := 0; i < len(fs.section); i++ {
+		subsection := fs.section[i]
+
+		var j uint32
+		for j = 1; j < subsection; j++ {
+			// Move across
+			currentSection = currentSection.NextSibling()
+		}
+		if i < len(fs.section)-1 {
+			// Move down
+			currentSection = currentSection.FirstChild()
+		}
+	}
+
+	// Consider the part specifier
+	var payload string
+
+	switch fs.part {
+	case invalidPart:
+		payload := extractPartial(currentSection, fs.partial)
+	case headerPart:
+		payload = extractHeader(currentSection)
+	case headerFieldsPart:
+		payload = extractHeaderFields(currentSection, fs.fields)
+	case headerFieldsNotPart:
+		payload = extractHeaderNotFields(currentSection, fs.fields)
+	case textPart:
+		payload = string(currentSection.Content())
+	case mimePart:
+		payload = extractMimeImb(currentSection)
+	}
+
+	// Add the section information to the field name
+	sectionSpec := fs.sectionSpec()
+	fieldName := fmt.Sprint("BODY", sectionSpec)
+	resp.putField(fieldName, payload)
+
 	return nil
 }
 
@@ -288,7 +336,7 @@ func bodyStructure(wrap *messageWrap, ext bool) (string, error) {
 
 		root := mime.Root
 
-		// TODO: finish this
+		// TODO: find out how to generate body-type-mpart and finish this
 		return "", nil
 	}
 }
@@ -389,11 +437,23 @@ func getBodyFields(wrap *messageWrap, bodyParams map[string]string) (string, err
 		bodyFieldOctets), nil
 }
 
+// Count the lines produced by the given reader
+func countLines(r io.Reader) int {
+	scanner := bufio.NewScanner(r)
+	lines := 0
+	for scanner.Scan() {
+		lines += 1
+	}
+	return lines
+}
+
 //---- UID ---------------------------------------------------------------------
 
 type uidFetchAtt struct{}
 
 func (a *uidFetchAtt) extract(resp response, msg *messageWrap) error {
+
+	resp.putField("UID", fmt.Sprint(msg.uid))
 	return nil
 }
 
@@ -404,5 +464,8 @@ type bodyPeekFetchAtt struct {
 }
 
 func (a *bodyPeekFetchAtt) extract(resp response, msg *messageWrap) error {
+	// TODO
+	// An alternate form of BODY[<section>] that does not implicitly
+	//         set the \Seen flag.
 	return nil
 }
