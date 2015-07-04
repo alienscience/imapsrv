@@ -114,8 +114,8 @@ func (l *lexer) listMailbox() (bool, string) {
 	return l.generalString("LIST-MAILBOX", listMailboxExceptionsChar)
 }
 
-// An integer
-func (l *lexer) integer() (bool, int32) {
+// An unsigned integer (imap type number)
+func (l *lexer) integer() (bool, uint32) {
 	l.startToken()
 
 	// Read a sequence of digits with sign
@@ -123,7 +123,7 @@ func (l *lexer) integer() (bool, int32) {
 
 	current := l.current()
 
-	for current >= zero && current <= nine || current == minus {
+	for current >= zero && current <= nine {
 		buffer = append(buffer, current)
 		current = l.consume()
 	}
@@ -134,12 +134,12 @@ func (l *lexer) integer() (bool, int32) {
 	}
 
 	// Convert to a number
-	num, err := strconv.ParseInt(string(buffer), 10, 32)
+	num, err := strconv.ParseUint(string(buffer), 10, 32)
 	if err != nil {
 		return false, 0
 	}
 
-	return true, int32(num)
+	return true, uint32(num)
 
 }
 
@@ -276,7 +276,7 @@ func (l *lexer) partSpecifier() (bool, partSpecifier) {
 
 	ok, word := l.dottedWord()
 	if !ok {
-		return false, invalidPart
+		return false, noPartSpecifier
 	}
 
 	// Convert the word to a part specifier
@@ -292,7 +292,7 @@ func (l *lexer) partSpecifier() (bool, partSpecifier) {
 	case "text":
 		return ok, textPart
 	default:
-		return false, invalidPart
+		return false, noPartSpecifier
 	}
 
 }

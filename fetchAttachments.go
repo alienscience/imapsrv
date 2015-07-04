@@ -25,11 +25,12 @@ type fetchSection struct {
 	partial *fetchPartial // nil if no fetchPartial exists
 }
 
+// Part specifiers
 // TODO: see if the definitions below can be converted to functions
 type partSpecifier int
 
 const (
-	invalidPart = iota
+	noPartSpecifier = iota
 	headerPart
 	headerFieldsPart
 	headerFieldsNotPart
@@ -39,8 +40,8 @@ const (
 
 // A byte range
 type fetchPartial struct {
-	fromOctet int32
-	toOctet   uint32
+	fromOctet uint32
+	length    uint32
 }
 
 //---- ENVELOPE ----------------------------------------------------------------
@@ -220,7 +221,7 @@ func (a *bodySectionFetchAtt) extract(resp response, msg *messageWrap) error {
 	var payload string
 
 	switch fs.part {
-	case invalidPart:
+	case noPartSpecifier:
 		payload := extractPartial(currentSection, fs.partial)
 	case headerPart:
 		payload = extractHeader(currentSection)
@@ -240,6 +241,21 @@ func (a *bodySectionFetchAtt) extract(resp response, msg *messageWrap) error {
 	resp.putField(fieldName, payload)
 
 	return nil
+}
+
+func extractPartial(section enmime.MIMEPart, partial *fetchPartial) string {
+
+	content := section.Content()
+
+	if partial == nil {
+		// Return the whole section
+		return string(content)
+	}
+
+	// If this point is reached, return part of the content
+	highIndex := partial.fromOctet + partial.length
+	partialContent := content[partial.fromOctet:highIndex]
+	return string(partialContent)
 }
 
 //---- BODYSTRUCTURE -----------------------------------------------------------
