@@ -3,10 +3,11 @@ package imapsrv
 import (
 	"errors"
 	"fmt"
-	"github.com/jhillyerd/go.enmime"
 	"log"
 	"mime"
 	"strings"
+
+	"github.com/jhillyerd/go.enmime"
 )
 
 // A fetch attachment extracts part of a message and adds it to the response.

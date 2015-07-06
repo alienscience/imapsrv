@@ -4,9 +4,10 @@ package boltstore
 
 import (
 	"fmt"
+	"os"
+
 	"github.com/alienscience/imapsrv/auth"
 	"github.com/boltdb/bolt"
-	"os"
 )
 
 type BoltAuthStore struct {

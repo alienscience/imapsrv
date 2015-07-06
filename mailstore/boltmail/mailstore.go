@@ -1,12 +1,15 @@
 package boltmail
 
 import (
-	"github.com/alienscience/imapsrv"
-	"github.com/boltdb/bolt"
 	"io"
 	"io/ioutil"
 	"os"
 	"time"
+
+	"fmt"
+
+	"github.com/alienscience/imapsrv"
+	"github.com/boltdb/bolt"
 )
 
 type BoltMailstore struct {
@@ -50,15 +53,32 @@ func NewBoltMailstore(filename string) (*BoltMailstore, error) {
 	return store, nil
 }
 
-func (b *BoltMailstore) Mailbox(path []string) (imapsrv.Mailbox, error) {
-	return nil, nil // TODO: Implement
+func (b *BoltMailstore) Mailbox(owner string, path []string) (box imapsrv.Mailbox, err error) {
+	err = b.connection.View(func(tx *bolt.Tx) error {
+		boltBox := &boltMailbox{
+			owner: owner,
+			path:  path,
+			store: b,
+		}
+		if e, _ := boltBox.Exists(); !e {
+			return fmt.Errorf("mailbox not found: %v", path) // TODO: injection danger? / security
+		}
+		box = boltBox
+		return nil
+	})
+	return
 }
 
-func (b *BoltMailstore) Mailboxes(path []string) ([]imapsrv.Mailbox, error) {
-	return nil, nil // TODO: Implement
+func (b *BoltMailstore) Mailboxes(owner string, path []string) (boxes []imapsrv.Mailbox, err error) {
+	box := &boltMailbox{
+		owner: owner,
+		path:  path,
+		store: b,
+	}
+	return box.getChildren()
 }
 
-func (b *BoltMailstore) NewMessage(input io.Reader) (imapsrv.Message, error) {
+func (b *BoltMailstore) NewMessage(rcpt string, input io.Reader) (imapsrv.Message, error) {
 	msg := &basicMessage{}
 	var err error
 
@@ -70,5 +90,43 @@ func (b *BoltMailstore) NewMessage(input io.Reader) (imapsrv.Message, error) {
 	msg.internalDate = time.Now()
 	msg.size = uint32(len(msg.body))
 
+	err = b.connection.Update(func(tx *bolt.Tx) error {
+		box := &boltMailbox{
+			owner: rcpt,
+			path:  []string{"INBOX"},
+			store: b,
+		}
+		return box.storeTransaction(msg, tx)
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	return msg, nil
+}
+
+func (b *BoltMailstore) NewUser(email string) error {
+	err := b.connection.Update(func(tx *bolt.Tx) error {
+		buck := tx.Bucket(usersBucket)
+		_, err := buck.CreateBucketIfNotExists([]byte(email))
+		return err
+	})
+	return err
+}
+
+func (b *BoltMailstore) Addresses() ([]string, error) {
+	var messages []string
+
+	err := b.connection.View(func(tx *bolt.Tx) error {
+		buck := tx.Bucket(usersBucket)
+		return buck.ForEach(func(k, _ []byte) error {
+			messages = append(messages, string(k))
+			return nil
+		})
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return messages, nil
 }

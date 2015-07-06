@@ -2,6 +2,7 @@ package imapsrv
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"log"
 	"net"
@@ -34,26 +35,26 @@ type lmtpClient struct {
 	session *lmtpSession
 }
 
-type lmtpEntryPoint struct {
+type endPoint struct {
 	unix bool
 	addr string
 }
 
 func LMTPOptionSocket(loc string) func(*Server) error {
 	return func(s *Server) error {
-		s.config.LmtpEndpoints = append(s.config.LmtpEndpoints, lmtpEntryPoint{true, loc})
+		s.config.LmtpEndpoints = append(s.config.LmtpEndpoints, endPoint{true, loc})
 		return nil
 	}
 }
 
 func LMTPOptionTCP(addr string) func(*Server) error {
 	return func(s *Server) error {
-		s.config.LmtpEndpoints = append(s.config.LmtpEndpoints, lmtpEntryPoint{false, addr})
+		s.config.LmtpEndpoints = append(s.config.LmtpEndpoints, endPoint{false, addr})
 		return nil
 	}
 }
 
-func (s *Server) runLMTPListener(entrypoint lmtpEntryPoint, number int) {
+func (s *Server) runLMTPListener(entrypoint endPoint, number int) {
 	// Add hostname to responses
 	lmtpStatusReady = fmt.Sprintf(lmtpStatusReady, s.config.Hostname)
 	lmtpStatusClosing = fmt.Sprintf(lmtpStatusClosing, s.config.Hostname)
@@ -66,13 +67,29 @@ func (s *Server) runLMTPListener(entrypoint lmtpEntryPoint, number int) {
 		addr, err := net.ResolveUnixAddr(unixNetwork, entrypoint.addr)
 		if err != nil {
 			log.Println("Warning, LMTP endpoint", number, "not started:", err)
+			return
 		}
 
 		// Create unix socket
-		listener, err = net.ListenUnix(unixNetwork, addr)
+		ulistener, err := net.ListenUnix(unixNetwork, addr)
 		if err != nil {
 			log.Println("Warning, LMTP endpoint", number, "not started:", err)
+			return
 		}
+		f, err := ulistener.File()
+		if err != nil {
+			log.Println("Warning, LMTP endpoint", number, "not started:", err)
+			// TODO: cleanup
+			return
+		}
+		err = f.Chmod(0777) // TODO: which permissions should be used?
+		// TODO: locally this changes it correctly to 0777, but when using `ls -l`, it changed to 0755
+		if err != nil {
+			log.Println("Warning, LMTP endpoint", number, "not started:", err)
+			// TODO: cleanup
+			return
+		}
+		listener = ulistener
 	} else {
 		// Parse tcp address
 		addr, err := net.ResolveTCPAddr(tcpNetwork, entrypoint.addr)
@@ -145,12 +162,23 @@ func (c *lmtpClient) handle(s *Server) {
 			}
 
 			c.session.receivingData = false
-			writeSimpleLine("250 OK", c.session.rw.W)
 
 			// TODO: we should now process the session,
 			// before continuing (or else it gets lost forever)
-			log.Println(string(data))
-
+			buf := bytes.NewBuffer(data)
+			for _, rcpt := range c.session.recipients {
+				msg, err := s.config.Mailstore.NewMessage(rcpt, buf)
+				if err != nil {
+					log.Println("Error occured:", err)
+					// TODO: this does not have to be the correct error message... it could be
+					// another reason for failing
+					writeSimpleLine("550 No such user here", c.session.rw.W)
+					continue
+				}
+				writeSimpleLine("250 OK", c.session.rw.W)
+				d, _ := msg.InternalDate()
+				log.Println(rcpt, "received:", d)
+			}
 		} else {
 			// Read line, tags, process and respond
 			line, err := c.session.rw.ReadLine()

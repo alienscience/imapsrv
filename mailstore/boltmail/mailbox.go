@@ -2,21 +2,24 @@ package boltmail
 
 import (
 	"fmt"
-	"github.com/alienscience/imapsrv"
-	"github.com/boltdb/bolt"
 	"strconv"
 	"strings"
+
+	"bytes"
+
+	"github.com/alienscience/imapsrv"
+	"github.com/boltdb/bolt"
 )
 
 type boltMailbox struct {
-	store *BoltMailstore
-	owner string
+	uid    int32
+	uidSet bool
+	store  *BoltMailstore
+	owner  string
 
-	path       []string
-	flags      uint8
-	currentUID int32
-
-	children []*boltMailbox
+	path     []string
+	flags    uint8
+	flagsSet bool
 
 	/*
 		// Get the path of the mailbox
@@ -45,6 +48,10 @@ var (
 	firstUnseen_bucket = []byte("firstUnseen")
 	total_bucket       = []byte("total")
 	recent_bucket      = []byte("recent")
+	uid_bucket         = []byte("uid")
+
+	uid_key     = []byte("uid")
+	counter_key = []byte("increment-counter")
 )
 
 func (b *boltMailbox) Path() []string {
@@ -52,17 +59,90 @@ func (b *boltMailbox) Path() []string {
 }
 
 func (b *boltMailbox) Flags() (uint8, error) {
+	if !b.flagsSet {
+		// TODO: fetch flags
+	}
 	return b.flags, nil
 }
 
 func (b *boltMailbox) UidValidity() (int32, error) {
-	return -1, fmt.Errorf("UidValidity() not implemented")
+	if !b.uidSet {
+		// TODO: fetch uid
+		err := b.store.connection.View(func(tx *bolt.Tx) error {
+			owner := tx.Bucket(usersBucket).Bucket([]byte(b.owner))
+			if owner == nil {
+				return fmt.Errorf("user not found: %s", owner)
+			}
+
+			// Get the UID bucket
+			var err error
+			uidBuck := owner.Bucket(uid_bucket)
+			if uidBuck == nil {
+				if tx.Writable() {
+					uidBuck, err = owner.CreateBucket(uid_bucket)
+					if err != nil {
+						return err
+					}
+					uidBuck.Put([]byte(strings.Join(b.path, "/")), []byte(strconv.Itoa(0)))
+					uidBuck.Put(counter_key, []byte(strconv.Itoa(1)))
+				}
+				b.uid = 0
+				return nil
+			}
+			// It existed, so get the value
+			val := uidBuck.Get([]byte(strings.Join(b.path, "/")))
+			if len(val) == 0 {
+				// Did not have an entry? Set it if we can
+				if tx.Writable() {
+					prevValue, err := getInt(counter_key, uidBuck)
+					if err != nil {
+						return err
+					}
+					uidBuck.Put([]byte(strings.Join(b.path, "/")), []byte(strconv.Itoa(prevValue)))
+					uidBuck.Put(counter_key, []byte(strconv.Itoa(prevValue+1)))
+				}
+				b.uid = 0
+				return nil
+			}
+			// Parse it
+			uid_int, err := strconv.Atoi(string(val))
+			if err != nil {
+				return err
+			}
+			b.uid = int32(uid_int)
+
+			return nil
+		})
+		if err != nil {
+			return -1, err
+		}
+	}
+	return b.uid, nil
 }
 
-func (b *boltMailbox) NextUid() (int32, error) {
-	// TODO: make it safe for concurrent access
-	return b.currentUID + 1, nil
-	// TODO: should we update the value here, or at the Mailstore.NewMessage?
+func (b *boltMailbox) NextUid() (uid int32, err error) {
+	err = b.store.connection.Update(func(tx *bolt.Tx) error {
+		mailbox, e := b.getMailboxBucket(tx)
+		if e != nil {
+			return e
+		}
+		uid, e = b.nextUidTransaction(mailbox)
+		return e
+	})
+	return
+}
+
+// nextUidTransaction increments the uid by one, in a transaction in which `mailbox` is valid
+func (b *boltMailbox) nextUidTransaction(mailbox *bolt.Bucket) (uid int32, err error) {
+	val := mailbox.Get(uid_key)
+	uid_int, e := strconv.Atoi(string(val))
+	if e != nil {
+		uid_int = 0
+	}
+	uid_int++
+	uid = int32(uid_int)
+	err = mailbox.Put(uid_key, []byte(strconv.Itoa(uid_int)))
+	return
 }
 
 func (b *boltMailbox) AllUids() (uids []int32, err error) {
@@ -100,6 +180,11 @@ func (b *boltMailbox) FirstUnseen() (uid int32, err error) {
 		}
 
 		uid_b := mailboxBucket.Get(firstUnseen_bucket)
+		if len(uid_b) == 0 {
+			uid = 0
+			return nil
+		}
+		// TODO: what to return if no messages are present? (empty)
 		uid_64, err := strconv.ParseInt(string(uid_b), 10, 32)
 		if err != nil {
 			return err
@@ -119,6 +204,11 @@ func (b *boltMailbox) TotalMessages() (total int32, err error) {
 		}
 
 		total_b := mailboxBucket.Get(total_bucket)
+		if len(total_b) == 0 {
+			total = 0
+			return nil
+		}
+
 		totalRecent, err := strconv.ParseInt(string(total_b), 10, 32)
 		if err != nil {
 			return err
@@ -138,6 +228,11 @@ func (b *boltMailbox) RecentMessages() (total int32, err error) {
 		}
 
 		total_b := mailboxBucket.Get(recent_bucket)
+		if len(total_b) == 0 {
+			total = 0
+			return nil
+		}
+
 		totalRecent, err := strconv.ParseInt(string(total_b), 10, 32)
 		if err != nil {
 			return err
@@ -169,7 +264,7 @@ func (b *boltMailbox) Fetch(uid int32) (imapsrv.Message, error) {
 		return nil, fmt.Errorf("mail %d not found", uid)
 	}
 
-	err = fromBytes(binary, msg)
+	err = msg.GobDecode(binary)
 	if err != nil {
 		return nil, err
 	}
@@ -177,16 +272,52 @@ func (b *boltMailbox) Fetch(uid int32) (imapsrv.Message, error) {
 	return msg, nil
 }
 
+func (b *boltMailbox) storeTransaction(msg *basicMessage, tx *bolt.Tx) error {
+	mailbox, err := b.getMailboxBucket(tx)
+	if err != nil {
+		return err
+	}
+
+	uid, err := b.nextUidTransaction(mailbox)
+	if err != nil {
+		return err
+	}
+
+	mail, err := mailbox.CreateBucketIfNotExists(mail_bucket)
+	if err != nil {
+		return fmt.Errorf("Could not create /INBOX mail bucket: %s", err)
+	}
+
+	val, err := msg.GobEncode()
+	if err != nil {
+		return err
+	}
+
+	return mail.Put([]byte(strconv.Itoa(int(uid))), val)
+
+}
+
 func (b *boltMailbox) getMailboxBucket(tx *bolt.Tx) (*bolt.Bucket, error) {
-	bucket := tx.Bucket([]byte(b.owner))
+	users := tx.Bucket(usersBucket)
+	bucket := users.Bucket([]byte(b.owner))
 	if bucket == nil {
 		return nil, fmt.Errorf("user bucket not found: %s", b.owner)
 	}
 
+	var mailboxBucket *bolt.Bucket
+	var err error
+
 	pathString := strings.Join(b.path, "/")
-	mailboxBucket := bucket.Bucket([]byte(pathString))
-	if mailboxBucket == nil {
-		return nil, fmt.Errorf("mailbox bucket not found: %s", pathString)
+	if tx.Writable() {
+		mailboxBucket, err = bucket.CreateBucketIfNotExists([]byte(pathString))
+		if err != nil {
+			return nil, fmt.Errorf("mailbox bucket not found and could not be created: %s", err)
+		}
+	} else {
+		mailboxBucket = bucket.Bucket([]byte(pathString))
+		if mailboxBucket == nil {
+			return nil, fmt.Errorf("mailbox not found: %s", pathString)
+		}
 	}
 
 	return mailboxBucket, nil
@@ -204,4 +335,42 @@ func (b *boltMailbox) getMailsBucket(tx *bolt.Tx) (*bolt.Bucket, error) {
 	}
 
 	return buck, nil
+}
+
+func (b *boltMailbox) getChildren() (boxes []imapsrv.Mailbox, err error) {
+	err = b.store.connection.View(func(tx *bolt.Tx) error {
+		users := tx.Bucket(usersBucket) // TODO: specific owner!
+		owner := users.Bucket([]byte(b.owner))
+		if owner == nil {
+			return fmt.Errorf("user does not exist: %s", b.owner)
+		}
+		c := owner.Cursor()
+		if c == nil {
+			return fmt.Errorf("could not create cursor")
+		}
+
+		prefix := []byte(strings.Join(b.path, "/"))
+		for k, _ := c.Seek(prefix); bytes.HasPrefix(k, prefix); k, _ = c.Next() {
+			boxes = append(boxes, &boltMailbox{
+				owner: b.owner,
+				path:  strings.Split(string(k), "/"),
+			})
+		}
+
+		return nil
+	})
+	return
+}
+
+func (b *boltMailbox) Exists() (exists bool, err error) {
+	err = b.store.connection.View(func(tx *bolt.Tx) error {
+		users := tx.Bucket(usersBucket)
+		owner := users.Bucket([]byte(b.owner))
+		if owner == nil {
+			return fmt.Errorf("user not found: %s", owner) // TODO: potential injection threath?
+		}
+		exists = owner.Bucket([]byte(strings.Join(b.path, "/"))) != nil
+		return nil
+	})
+	return
 }

@@ -1,10 +1,11 @@
 package main
 
 import (
-	imap "github.com/alienscience/imapsrv"
-	"github.com/alienscience/imapsrv/auth/boltstore"
 	"io/ioutil"
 	"log"
+
+	imap "github.com/alienscience/imapsrv"
+	"github.com/alienscience/imapsrv/auth/boltstore"
 )
 
 func main() {

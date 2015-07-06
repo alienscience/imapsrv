@@ -9,11 +9,15 @@ import (
 type Mailstore interface {
 	// Get IMAP mailbox information
 	// Returns nil if the mailbox does not exist
-	Mailbox(path []string) (Mailbox, error)
+	Mailbox(owner string, path []string) (Mailbox, error)
 	// Get a list of mailboxes at the given path
-	Mailboxes(path []string) ([]Mailbox, error)
+	Mailboxes(owner string, path []string) ([]Mailbox, error)
 	// NewMessage adds the raw message information to the server, in the correct location
-	NewMessage(message io.Reader) (Message, error)
+	NewMessage(rcpt string, message io.Reader) (Message, error)
+	// NewUser adds the user to the server
+	NewUser(email string) error
+	// Addresses returns a list of all available recipients
+	Addresses() ([]string, error)
 }
 
 // An IMAP mailbox
@@ -69,8 +73,8 @@ var mailboxFlags = map[uint8]string{
 // A message is read through this interface
 type MessageReader interface {
 	io.Reader
-	io.Seeker
-	io.Closer
+	//io.Seeker
+	//io.Closer
 }
 
 // An IMAP message

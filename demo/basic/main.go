@@ -1,9 +1,6 @@
 package main
 
-import (
-	imap "github.com/alienscience/imapsrv"
-	"log"
-)
+import imap "github.com/alienscience/imapsrv"
 
 func main() {
 	// The simplest possible server - zero config

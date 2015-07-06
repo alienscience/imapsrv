@@ -1,11 +1,12 @@
 package main
 
 import (
+	"io/ioutil"
+	"log"
+
 	imap "github.com/alienscience/imapsrv"
 	"github.com/alienscience/imapsrv/auth/boltstore"
 	"github.com/alienscience/imapsrv/mailstore/boltmail"
-	"io/ioutil"
-	"log"
 )
 
 func main() {
@@ -21,13 +22,16 @@ func main() {
 	if err != nil {
 		log.Fatalln("Could not create BoltAuthStore:", err)
 	}
-	// Add a user
-	authStore.CreateUser("test@example.com", "password")
 
+	// Initialize mailstorage backend
 	mailStore, err := boltmail.NewBoltMailstore(tmpFile.Name() + "_mailstore")
 	if err != nil {
 		log.Fatalln("Could not create BoltMailstore:", err)
 	}
+
+	// Add a user
+	authStore.CreateUser("test@example.local", "password")
+	mailStore.NewUser("test@example.local")
 
 	// Put everything together
 	s := imap.NewServer(

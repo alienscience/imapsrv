@@ -3,8 +3,9 @@ package imapsrv
 import (
 	"bufio"
 	"bytes"
-	"github.com/jhillyerd/go.enmime"
 	"net/mail"
+
+	"github.com/jhillyerd/go.enmime"
 )
 
 // A wrapper around a Mailbox that provides helper functions
@@ -29,8 +30,8 @@ type messageWrap struct {
 const dateFormat = "02-Jan-2006 15:04:05 -0700"
 
 // Get a mailbox from a mailstore
-func getMailbox(store Mailstore, path []string) (*mailboxWrap, error) {
-	mbox, err := store.Mailbox(path)
+func getMailbox(store Mailstore, owner string, path []string) (*mailboxWrap, error) {
+	mbox, err := store.Mailbox(owner, path)
 	if err != nil {
 		return nil, err
 	}
@@ -39,8 +40,8 @@ func getMailbox(store Mailstore, path []string) (*mailboxWrap, error) {
 }
 
 // Get mailboxes from a mailstore
-func getMailboxes(store Mailstore, path []string) ([]*mailboxWrap, error) {
-	mboxes, err := store.Mailboxes(path)
+func getMailboxes(store Mailstore, owner string, path []string) ([]*mailboxWrap, error) {
+	mboxes, err := store.Mailboxes(owner, path)
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +110,6 @@ func (m *messageWrap) getMessage() (*mail.Message, error) {
 		if err != nil {
 			return nil, err
 		}
-		defer reader.Close()
 
 		m.message, err = mail.ReadMessage(reader)
 		if err != nil {
@@ -146,7 +146,6 @@ func (m *messageWrap) rfc822Header() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer reader.Close()
 
 	// Read the message line by line
 	buf := new(bytes.Buffer)

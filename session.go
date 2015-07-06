@@ -44,6 +44,8 @@ type session struct {
 	encryption encryptionLevel
 	// mailbox is the currently selected mailbox (if st == selected)
 	mailbox *mailboxWrap
+	// user is the currently authenticated user
+	user string
 }
 
 // Create a new IMAP session
@@ -70,7 +72,7 @@ func (s *session) log(info ...interface{}) {
 func (s *session) selectMailbox(path []string) (bool, error) {
 	// Lookup the mailbox
 	mailstore := s.config.Mailstore
-	mbox, err := getMailbox(mailstore, path)
+	mbox, err := getMailbox(mailstore, s.user, path)
 
 	if err != nil {
 		return false, err
@@ -103,7 +105,7 @@ func (s *session) list(reference []string, pattern []string) ([]*mailboxWrap, er
 
 	// Just return a single mailbox if there are no wildcards
 	if wildcard == -1 {
-		mbox, err := getMailbox(s.config.Mailstore, path)
+		mbox, err := getMailbox(s.config.Mailstore, s.user, path)
 		if err != nil {
 			return ret, err
 		}
@@ -203,7 +205,7 @@ func (s *session) depthFirstMailboxes(
 	switch pat {
 	case "%":
 		// Get all the mailboxes at the current path
-		all, err := getMailboxes(mailstore, path)
+		all, err := getMailboxes(mailstore, s.user, path)
 		if err == nil {
 			for _, mbox := range all {
 				// Consider the next pattern
@@ -218,7 +220,7 @@ func (s *session) depthFirstMailboxes(
 
 	case "*":
 		// Get all the mailboxes at the current path
-		all, err := getMailboxes(mailstore, path)
+		all, err := getMailboxes(mailstore, s.user, path)
 		if err == nil {
 			for _, mbox := range all {
 				// Keep using this pattern
@@ -233,7 +235,7 @@ func (s *session) depthFirstMailboxes(
 
 	default:
 		// Not a wildcard pattern
-		mbox, err := getMailbox(mailstore, path)
+		mbox, err := getMailbox(mailstore, s.user, path)
 		if err == nil {
 			ret = append(results, mbox)
 			ret, err = s.depthFirstMailboxes(

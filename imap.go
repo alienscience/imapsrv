@@ -26,7 +26,7 @@ type Config struct {
 
 	AuthBackend auth.AuthStore
 
-	LmtpEndpoints []lmtpEntryPoint
+	LmtpEndpoints []endPoint
 
 	// Hostname is the hostname of this entire server
 	Hostname string
@@ -34,6 +34,10 @@ type Config struct {
 	// Production indicates whether or not this is used in production
 	// - disabling this allows for the program to panic
 	Production bool
+	
+	// AliasMapEndpoints indicate the endpoints on which to advertise the available addresses
+	// TODO: use / advertise these
+	AliasMapEndpoints []endPoint
 }
 
 type option func(*Server) error

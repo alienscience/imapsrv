@@ -123,6 +123,7 @@ func (c *login) execute(sess *session, out chan response) {
 	auth, err := sess.server.config.AuthBackend.Authenticate(c.userId, c.password)
 	if auth {
 		sess.st = authenticated
+		sess.user = c.userId
 		out <- ok(c.tag, "LOGIN completed")
 		return
 	}
@@ -144,6 +145,7 @@ func (c *logout) execute(sess *session, out chan response) {
 	defer close(out)
 
 	sess.st = notAuthenticated
+	sess.user = ""
 	out <- ok(c.tag, "LOGOUT completed").
 		shouldClose().
 		putLine("BYE IMAP4rev1 Server logging out")
@@ -296,6 +298,10 @@ func (c *fetch) execute(sess *session, out chan response) {
 	if sess.st != authenticated {
 		out <- mustAuthenticate(sess, c.tag, "FETCH")
 		return
+	}
+
+	if sess.mailbox == nil {
+		out <- bad(c.tag, "Must SELECT first") // TODO: is this the correct message?
 	}
 
 	// If there is a fetch macro - convert it into fetch attachments

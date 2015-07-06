@@ -2,8 +2,9 @@ package main
 
 import (
 	"fmt"
-	imap "github.com/alienscience/imapsrv"
 	"log"
+
+	imap "github.com/alienscience/imapsrv"
 )
 
 func main() {
