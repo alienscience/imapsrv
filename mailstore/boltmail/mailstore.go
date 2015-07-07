@@ -30,7 +30,7 @@ var (
 // NewBoltAuthStore creates a new auth store using BoltDB, at the specified file location
 func NewBoltMailstore(filename string) (*BoltMailstore, error) {
 	// Open database
-	c, err := bolt.Open(filename, os.FileMode(600), nil)
+	c, err := bolt.Open(filename, os.FileMode(0700), nil)
 	if err != nil {
 		return nil, err
 	}

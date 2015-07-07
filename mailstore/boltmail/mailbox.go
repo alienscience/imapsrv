@@ -7,6 +7,8 @@ import (
 
 	"bytes"
 
+	"log"
+
 	"github.com/alienscience/imapsrv"
 	"github.com/boltdb/bolt"
 )
@@ -44,11 +46,11 @@ type boltMailbox struct {
 }
 
 var (
-	mail_bucket        = []byte("mail")
-	firstUnseen_bucket = []byte("firstUnseen")
-	total_bucket       = []byte("total")
-	recent_bucket      = []byte("recent")
-	uid_bucket         = []byte("uid")
+	mail_bucket     = []byte("mail")
+	firstUnseen_key = []byte("firstUnseen")
+	total_bucket    = []byte("total")
+	recent_key      = []byte("recent")
+	uid_bucket      = []byte("uid")
 
 	uid_key     = []byte("uid")
 	counter_key = []byte("increment-counter")
@@ -179,9 +181,9 @@ func (b *boltMailbox) FirstUnseen() (uid int32, err error) {
 			return err
 		}
 
-		uid_b := mailboxBucket.Get(firstUnseen_bucket)
+		uid_b := mailboxBucket.Get(firstUnseen_key)
 		if len(uid_b) == 0 {
-			uid = 0
+			uid = -1
 			return nil
 		}
 		// TODO: what to return if no messages are present? (empty)
@@ -202,19 +204,11 @@ func (b *boltMailbox) TotalMessages() (total int32, err error) {
 		if err != nil {
 			return err
 		}
-
-		total_b := mailboxBucket.Get(total_bucket)
-		if len(total_b) == 0 {
-			total = 0
+		mail := mailboxBucket.Bucket(mail_bucket)
+		if mail == nil {
 			return nil
 		}
-
-		totalRecent, err := strconv.ParseInt(string(total_b), 10, 32)
-		if err != nil {
-			return err
-		}
-
-		total = int32(totalRecent)
+		total = int32(mail.Stats().KeyN)
 		return nil
 	})
 	return
@@ -227,7 +221,7 @@ func (b *boltMailbox) RecentMessages() (total int32, err error) {
 			return err
 		}
 
-		total_b := mailboxBucket.Get(recent_bucket)
+		total_b := mailboxBucket.Get(recent_key)
 		if len(total_b) == 0 {
 			total = 0
 			return nil
@@ -293,8 +287,38 @@ func (b *boltMailbox) storeTransaction(msg *basicMessage, tx *bolt.Tx) error {
 		return err
 	}
 
-	return mail.Put([]byte(strconv.Itoa(int(uid))), val)
+	err = mail.Put([]byte(strconv.Itoa(int(uid))), val)
+	if err != nil {
+		return err
+	}
 
+	// Update first-unseen
+	id_b := mailbox.Get(firstUnseen_key)
+	if len(id_b) == 0 {
+		// Set uid
+		log.Println("Setting firstUnseen_key")
+		// TODO: We would probably need to add +1 to make sure this != 0, but then we might
+		// go out of range.... howerver, the specs require
+		//	; Non-zero unsigned 32-bit integer
+		//  ; (0 < n < 4,294,967,296)
+		err = mailbox.Put(firstUnseen_key, []byte(strconv.Itoa(mail.Stats().KeyN)))
+		if err != nil {
+			return err
+		}
+	}
+
+	// Update recent number
+	recent_b := mailbox.Get(recent_key)
+	recent := 0
+	if len(recent_b) > 0 {
+		recent, err = strconv.Atoi(string(recent_b))
+		if err != nil {
+			return err
+		}
+	}
+	mailbox.Put(recent_key, []byte(strconv.Itoa(recent)))
+
+	return nil
 }
 
 func (b *boltMailbox) getMailboxBucket(tx *bolt.Tx) (*bolt.Bucket, error) {

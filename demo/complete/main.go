@@ -1,8 +1,9 @@
 package main
 
 import (
-	"io/ioutil"
 	"log"
+
+	"os"
 
 	imap "github.com/alienscience/imapsrv"
 	"github.com/alienscience/imapsrv/auth/boltstore"
@@ -13,7 +14,7 @@ func main() {
 	// This server uses everything from other packages, combined
 
 	// Create a file for the BoltAuthStore - in production this should probably NOT be a temporary file (!)
-	tmpFile, err := ioutil.TempFile("", "imap_")
+	tmpFile, err := os.Create("/tmp/imapsrv_db")
 	if err != nil {
 		log.Fatalln("Could not create tempfile:", err)
 	}

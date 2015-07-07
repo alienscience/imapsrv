@@ -169,12 +169,13 @@ func (s *session) addMailboxInfo(resp *finalResponse) error {
 	if err != nil {
 		return err
 	}
-
-	resp.put(fmt.Sprint(totalMessages, " EXISTS"))
-	resp.put(fmt.Sprint(recentMessages, " RECENT"))
-	resp.put(fmt.Sprintf("OK [UNSEEN %d] Message %d is first unseen", firstUnseen, firstUnseen))
-	resp.put(fmt.Sprintf("OK [UIDVALIDITY %d] UIDs valid", uidValidity))
-	resp.put(fmt.Sprintf("OK [UIDNEXT %d] Predicted next UID", nextUid))
+	resp.putLine(fmt.Sprint(totalMessages, " EXISTS"))
+	resp.putLine(fmt.Sprint(recentMessages, " RECENT"))
+	if firstUnseen >= 0 {
+		resp.putLine(fmt.Sprintf("OK [UNSEEN %d] Message %d is first unseen", firstUnseen, firstUnseen))
+	}
+	resp.putLine(fmt.Sprintf("OK [UIDVALIDITY %d] UIDs valid", uidValidity))
+	resp.putLine(fmt.Sprintf("OK [UIDNEXT %d] Predicted next UID", nextUid))
 	return nil
 }
 

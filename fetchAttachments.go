@@ -1,13 +1,16 @@
 package imapsrv
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"mime"
 	"strings"
 
-	"github.com/jhillyerd/go.enmime"
+	"net/mail"
+
+	"bytes"
+
+	enmime "github.com/jhillyerd/go.enmime"
 )
 
 // A fetch attachment extracts part of a message and adds it to the response.
@@ -269,18 +272,18 @@ func bodyStructure(wrap *messageWrap, ext bool) (string, error) {
 		case bodyTypeBasic:
 			return strings.Join([]string{mediaType, bodyFields},
 				" "), nil
-			/* TODO: fix and uncomment (it may not work, but at least now it compiles)
-			case bodyTypeMessage:
-				envelope := getEnvelope(header)
-				return strings.Join([]string{mediaType, bodyFields, envelope},
-					" "), nil
-			case bodyTypeText:
-				lineCount := fmt.Sprint(countLines(msg.Body))
-				return strings.Join([]string{mediaType, bodyFields, lineCount},
-					" "), nil
-			*/
+		// TODO: fix and uncomment (it may not work, but at least now it compiles)
+		case bodyTypeMessage:
+			envelope := getEnvelope(header)
+			return strings.Join([]string{mediaType, bodyFields, envelope},
+				" "), nil
+
+		case bodyTypeText:
+			lineCount := fmt.Sprint(countLines(msg.Body))
+			return strings.Join([]string{mediaType, bodyFields, lineCount},
+				" "), nil
 		default:
-			return "", errors.New("Unknown body type")
+			return "", fmt.Errorf("Unknown body type: %v", bodyType)
 		}
 	} else {
 
@@ -295,6 +298,156 @@ func bodyStructure(wrap *messageWrap, ext bool) (string, error) {
 		// TODO: finish this
 		return "", nil
 	}
+}
+
+/* getEnvelope returns the Envelope of a certain message:
+   A parenthesized list that describes the envelope structure of a
+   message.  This is computed by the server by parsing the
+   [RFC-2822] header into the component parts, defaulting various
+   fields as necessary.
+
+   The fields of the envelope structure are in the following
+   order: date, subject, from, sender, reply-to, to, cc, bcc,
+   in-reply-to, and message-id.  The date, subject, in-reply-to,
+   and message-id fields are strings.  The from, sender, reply-to,
+   to, cc, and bcc fields are parenthesized lists of address
+   structures.
+
+   An address structure is a parenthesized list that describes an
+   electronic mail address.  The fields of an address structure
+   are in the following order: personal name, [SMTP]
+   at-domain-list (source route), mailbox name, and host name.
+
+   [RFC-2822] group syntax is indicated by a special form of
+   address structure in which the host name field is NIL.  If the
+   mailbox name field is also NIL, this is an end of group marker
+   (semi-colon in RFC 822 syntax).  If the mailbox name field is
+   non-NIL, this is a start of group marker, and the mailbox name
+   field holds the group name phrase.
+
+   If the Date, Subject, In-Reply-To, and Message-ID header lines
+   are absent in the [RFC-2822] header, the corresponding member
+   of the envelope is NIL; if these header lines are present but
+   empty the corresponding member of the envelope is the empty
+   string.
+
+   Note: some servers may return a NIL envelope member in the
+		"present but empty" case.  Clients SHOULD treat NIL and
+		empty string as identical.
+
+		Note: [RFC-2822] requires that all messages have a valid
+		Date header.  Therefore, the date member in the envelope can
+		not be NIL or the empty string.
+
+		Note: [RFC-2822] requires that the In-Reply-To and
+		Message-ID headers, if present, have non-empty content.
+		Therefore, the in-reply-to and message-id members in the
+		envelope can not be the empty string.
+
+	 If the From, To, cc, and bcc header lines are absent in the
+	 [RFC-2822] header, or are present but empty, the corresponding
+	 member of the envelope is NIL.
+
+	 If the Sender or Reply-To lines are absent in the [RFC-2822]
+	 header, or are present but empty, the server sets the
+	 corresponding member of the envelope to be the same value as
+	 the from member (the client is not expected to know to do
+	 this).
+
+		Note: [RFC-2822] requires that all messages have a valid
+		From header.  Therefore, the from, sender, and reply-to
+		members in the envelope can not be NIL.
+*/
+func getEnvelope(header mail.Header) string {
+	var buf bytes.Buffer
+	buf.WriteRune('(')
+
+	// Date
+	if date := header.Get("Date"); len(date) > 0 {
+		buf.WriteRune('"')
+		buf.WriteString(header.Get("Date"))
+		buf.WriteString("\" ")
+	} else {
+		buf.WriteString("NIL ")
+	}
+
+	// Subject
+	// TODO: should we escape Subject for "" ?
+	if subj := header.Get("Subject"); len(subj) > 0 {
+		buf.WriteRune('"')
+		buf.WriteString(subj)
+		buf.WriteString("\" ")
+	} else {
+		buf.WriteString("NIL ")
+	}
+
+	// From
+	buf.WriteRune('"')
+	buf.WriteString(header.Get("From")) // TODO: verify? WHat to do if this is empty?
+	// TODO: "From" is often not NAME SP AT-DOMAIN-LIST SP MAILNAME SP HOSTNAME... how to fix?
+	buf.WriteString("\" ")
+
+	// Sender
+	buf.WriteRune('"')
+	if sender := header.Get("Sender"); len(sender) > 0 {
+		buf.WriteString(sender)
+	} else {
+		buf.WriteString(header.Get("From"))
+	}
+	buf.WriteString("\" ")
+
+	// Reply-To
+	buf.WriteRune('"')
+	if replyto := header.Get("Reply-To"); len(replyto) > 0 {
+		buf.WriteString(replyto)
+	} else {
+		buf.WriteString(header.Get("From"))
+	}
+	buf.WriteString("\" ")
+
+	// To
+	if to := header.Get("To"); len(to) > 0 {
+		buf.WriteRune('"')
+		buf.WriteString(to)
+		buf.WriteString("\" ")
+	} else {
+		buf.WriteString("NIL ")
+	}
+
+	// CC
+	if cc := header.Get("CC"); len(cc) > 0 {
+		buf.WriteRune('"')
+		buf.WriteString(cc)
+		buf.WriteString("\" ")
+	} else {
+		buf.WriteString("NIL ")
+	}
+
+	// BCC
+	if bcc := header.Get("BCC"); len(bcc) > 0 {
+		buf.WriteRune('"')
+		buf.WriteString(bcc)
+		buf.WriteString("\" ")
+	} else {
+		buf.WriteString("NIL ")
+	}
+
+	// In-reply to
+	if replyto := header.Get("In-Reply-To"); len(replyto) > 0 {
+		buf.WriteRune('"')
+		buf.WriteString(replyto)
+		buf.WriteString("\" ")
+	} else {
+		buf.WriteString("NIL ")
+	}
+
+	// Message-id
+	buf.WriteRune('"')
+	buf.WriteString(header.Get("Message-Id")) // TODO: verify? What to do if this is empty?
+	buf.WriteString("\" ")
+
+	buf.WriteRune(')')
+	return buf.String()
 }
 
 // Returns a bodyType identifier, a media type string and media type parameters
