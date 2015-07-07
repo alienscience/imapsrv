@@ -59,6 +59,10 @@ func (a *envelopeFetchAtt) extract(resp response, msg *messageWrap) error {
 
 	// Add header fields
 	root := mime.Root
+	if root == nil {
+		// TODO: what should we do in this case?
+		return fmt.Errorf("mime root could not be determined")
+	}
 	header := root.Header()
 	env := fmt.Sprint(
 		"(",
@@ -225,23 +229,33 @@ func (a *bodySectionFetchAtt) extract(resp response, msg *messageWrap) error {
 
 	switch fs.part {
 	case noPartSpecifier:
-		payload := extractPartial(currentSection, fs.partial)
+		payload = extractPartial(currentSection, fs.partial)
 	case headerPart:
-		payload = extractHeader(currentSection)
+		// TODO
+		//payload = extractHeader(currentSection)
 	case headerFieldsPart:
-		payload = extractHeaderFields(currentSection, fs.fields)
+		// TODO
+		//payload = extractHeaderFields(currentSection, fs.fields)
 	case headerFieldsNotPart:
-		payload = extractHeaderNotFields(currentSection, fs.fields)
+		// TODO
+		//payload = extractHeaderNotFields(currentSection, fs.fields)
 	case textPart:
-		payload = string(currentSection.Content())
+		// TODO
+		//payload = string(currentSection.Content())
 	case mimePart:
-		payload = extractMimeImb(currentSection)
+		// TODO
+		//payload = extractMimeImb(currentSection)
 	}
 
 	// Add the section information to the field name
-	sectionSpec := fs.sectionSpec()
-	fieldName := fmt.Sprint("BODY", sectionSpec)
-	resp.putField(fieldName, payload)
+	// TODO: fs.sectionSpec is undefined
+	/*
+		sectionSpec := fs.sectionSpec()
+		fieldName := fmt.Sprint("BODY", sectionSpec)
+		resp.putField(fieldName, payload)
+	*/
+	// TODO: remove when above is fixed
+	log.Println("DEBUG:", payload)
 
 	return nil
 }

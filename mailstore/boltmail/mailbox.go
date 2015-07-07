@@ -316,7 +316,7 @@ func (b *boltMailbox) storeTransaction(msg *basicMessage, tx *bolt.Tx) error {
 			return err
 		}
 	}
-	mailbox.Put(recent_key, []byte(strconv.Itoa(recent)))
+	mailbox.Put(recent_key, []byte(strconv.Itoa(recent+1)))
 
 	return nil
 }

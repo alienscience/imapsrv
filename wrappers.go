@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"bytes"
 	"net/mail"
+
+	enmime "github.com/jhillyerd/go.enmime"
 )
 
 // A wrapper around a Mailbox that provides helper functions
