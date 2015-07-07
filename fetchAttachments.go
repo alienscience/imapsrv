@@ -1,14 +1,14 @@
 package imapsrv
 
 import (
+	"bufio"
+	"bytes"
 	"fmt"
+	"io"
 	"log"
 	"mime"
-	"strings"
-
 	"net/mail"
-
-	"bytes"
+	"strings"
 
 	enmime "github.com/jhillyerd/go.enmime"
 )
@@ -28,11 +28,12 @@ type fetchSection struct {
 	partial *fetchPartial // nil if no fetchPartial exists
 }
 
+// Part specifiers
 // TODO: see if the definitions below can be converted to functions
 type partSpecifier int
 
 const (
-	invalidPart = iota
+	noPartSpecifier = iota
 	headerPart
 	headerFieldsPart
 	headerFieldsNotPart
@@ -42,8 +43,8 @@ const (
 
 // A byte range
 type fetchPartial struct {
-	fromOctet int32
-	toOctet   uint32
+	fromOctet uint32
+	length    uint32
 }
 
 //---- ENVELOPE ----------------------------------------------------------------
@@ -196,7 +197,68 @@ type bodySectionFetchAtt struct {
 }
 
 func (a *bodySectionFetchAtt) extract(resp response, msg *messageWrap) error {
+	mime, err := msg.getMime()
+	if err != nil {
+		return err
+	}
+
+	currentSection := mime.Root
+	fs := a.fetchSection
+
+	// Go to the requested section
+	for i := 0; i < len(fs.section); i++ {
+		subsection := fs.section[i]
+
+		var j uint32
+		for j = 1; j < subsection; j++ {
+			// Move across
+			currentSection = currentSection.NextSibling()
+		}
+		if i < len(fs.section)-1 {
+			// Move down
+			currentSection = currentSection.FirstChild()
+		}
+	}
+
+	// Consider the part specifier
+	var payload string
+
+	switch fs.part {
+	case noPartSpecifier:
+		payload := extractPartial(currentSection, fs.partial)
+	case headerPart:
+		payload = extractHeader(currentSection)
+	case headerFieldsPart:
+		payload = extractHeaderFields(currentSection, fs.fields)
+	case headerFieldsNotPart:
+		payload = extractHeaderNotFields(currentSection, fs.fields)
+	case textPart:
+		payload = string(currentSection.Content())
+	case mimePart:
+		payload = extractMimeImb(currentSection)
+	}
+
+	// Add the section information to the field name
+	sectionSpec := fs.sectionSpec()
+	fieldName := fmt.Sprint("BODY", sectionSpec)
+	resp.putField(fieldName, payload)
+
 	return nil
+}
+
+func extractPartial(section enmime.MIMEPart, partial *fetchPartial) string {
+
+	content := section.Content()
+
+	if partial == nil {
+		// Return the whole section
+		return string(content)
+	}
+
+	// If this point is reached, return part of the content
+	highIndex := partial.fromOctet + partial.length
+	partialContent := content[partial.fromOctet:highIndex]
+	return string(partialContent)
 }
 
 //---- BODYSTRUCTURE -----------------------------------------------------------
@@ -295,7 +357,7 @@ func bodyStructure(wrap *messageWrap, ext bool) (string, error) {
 
 		root := mime.Root
 		log.Println("Debug:", root)
-		// TODO: finish this
+		// TODO: find out how to generate body-type-mpart and finish this
 		return "", nil
 	}
 }
@@ -546,11 +608,23 @@ func getBodyFields(wrap *messageWrap, bodyParams map[string]string) (string, err
 		bodyFieldOctets), nil
 }
 
+// Count the lines produced by the given reader
+func countLines(r io.Reader) int {
+	scanner := bufio.NewScanner(r)
+	lines := 0
+	for scanner.Scan() {
+		lines += 1
+	}
+	return lines
+}
+
 //---- UID ---------------------------------------------------------------------
 
 type uidFetchAtt struct{}
 
 func (a *uidFetchAtt) extract(resp response, msg *messageWrap) error {
+
+	resp.putField("UID", fmt.Sprint(msg.uid))
 	return nil
 }
 
@@ -561,5 +635,8 @@ type bodyPeekFetchAtt struct {
 }
 
 func (a *bodyPeekFetchAtt) extract(resp response, msg *messageWrap) error {
+	// TODO
+	// An alternate form of BODY[<section>] that does not implicitly
+	//         set the \Seen flag.
 	return nil
 }

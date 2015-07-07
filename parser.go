@@ -378,7 +378,7 @@ func (p *parser) optionalFetchPartial() *fetchPartial {
 		parserPanic("Expected none-zero number in fetch partial")
 	}
 
-	ret.toOctet = nz
+	ret.length = nz
 
 	// Then a greater than sign
 	if !p.lexer.greaterThan() {
