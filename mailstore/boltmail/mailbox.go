@@ -7,8 +7,6 @@ import (
 
 	"bytes"
 
-	"log"
-
 	"github.com/alienscience/imapsrv"
 	"github.com/boltdb/bolt"
 )
@@ -62,6 +60,12 @@ func (b *boltMailbox) Path() []string {
 
 func (b *boltMailbox) Flags() (imapsrv.MailboxFlag, error) {
 	if !b.flagsSet {
+		err := b.store.connection.View(func(tx *bolt.Tx) error {
+			return b.refreshTransaction(tx)
+		})
+		if err != nil {
+			return b.flags, nil
+		}
 		// TODO: fetch flags
 	}
 	return b.flags, nil
@@ -296,7 +300,6 @@ func (b *boltMailbox) storeTransaction(msg *basicMessage, tx *bolt.Tx) error {
 	id_b := mailbox.Get(firstUnseen_key)
 	if len(id_b) == 0 {
 		// Set uid
-		log.Println("Setting firstUnseen_key")
 		// TODO: We would probably need to add +1 to make sure this != 0, but then we might
 		// go out of range.... howerver, the specs require
 		//	; Non-zero unsigned 32-bit integer
@@ -391,6 +394,17 @@ func (b *boltMailbox) deleteOrNoselectTransaction(tx *bolt.Tx) error {
 	}
 }
 
+func (b *boltMailbox) createTransaction(tx *bolt.Tx) error {
+	userBuck := tx.Bucket(usersBucket).Bucket([]byte(b.owner))
+	if userBuck == nil {
+		return fmt.Errorf("user bucket not found: %s", b.owner)
+	}
+
+	pathString := strings.Join(b.path, "/")
+	_, err := userBuck.CreateBucket([]byte(pathString))
+	return err
+}
+
 func (b *boltMailbox) getMailboxBucketTx(tx *bolt.Tx) (*bolt.Bucket, error) {
 	users := tx.Bucket(usersBucket)
 	bucket := users.Bucket([]byte(b.owner))
@@ -443,11 +457,21 @@ func (b *boltMailbox) getChildren() (boxes []imapsrv.Mailbox, err error) {
 			return fmt.Errorf("could not create cursor")
 		}
 
-		prefix := []byte(strings.Join(b.path, "/"))
+		var prefix []byte
+		if len(b.path) == 0 {
+			prefix = []byte(strings.Join(b.path, "/"))
+		} else {
+			prefix = []byte(strings.Join(b.path, "/") + "/")
+		}
+
 		for k, _ := c.Seek(prefix); len(k) > 0 && bytes.HasPrefix(k, prefix) && !bytes.Equal(k, prefix); k, _ = c.Next() {
+			if bytes.Count(k, []byte("/")) > bytes.Count(prefix, []byte("/")) {
+				continue // it is nested deeper
+			}
 			boxes = append(boxes, &boltMailbox{
 				owner: b.owner,
 				path:  strings.Split(string(k), "/"),
+				store: b.store,
 			})
 		}
 		return nil

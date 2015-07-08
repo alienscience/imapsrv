@@ -14,6 +14,8 @@ type Mailstore interface {
 	Mailboxes(owner string, path []string) ([]Mailbox, error)
 	// DeleteMailbox removes the mailbox from the current user, or (if it has children), sets /Noselect flag
 	DeleteMailbox(owner string, path []string) error
+	// NewMailbox creates a new mailbox for the given user - error is nil if and only if this was successfull.
+	NewMailbox(owner string, path []string) error
 	// NewMessage adds the raw message information to the server, in the correct location
 	NewMessage(rcpt string, message io.Reader) (Message, error)
 	// NewUser adds the user to the server
@@ -68,10 +70,10 @@ const (
 )
 
 var mailboxFlags = map[MailboxFlag]string{
-	Noinferiors: "Noinferiors",
-	Noselect:    "Noselect",
-	Marked:      "Marked",
-	Unmarked:    "Unmarked",
+	Noinferiors: `\Noinferiors`,
+	Noselect:    `\Noselect`,
+	Marked:      `\Marked`,
+	Unmarked:    `\Unmarked`,
 }
 
 // A message is read through this interface
