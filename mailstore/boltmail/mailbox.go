@@ -58,6 +58,62 @@ func (b *boltMailbox) Path() []string {
 	return b.path
 }
 
+// moveBucket moves the inner bucket with key 'oldkey' to a new bucket with key 'newkey'
+// must be used within an Update-transaction
+func moveBucket(oldParent, newParent *bolt.Bucket, oldkey, newkey []byte) error {
+	oldBuck := oldParent.Bucket(oldkey)
+	newBuck, err := newParent.CreateBucket(newkey)
+	if err != nil {
+		return err
+	}
+
+	err = oldBuck.ForEach(func(k, v []byte) error {
+		if v == nil {
+			// Nested bucket
+			return moveBucket(oldBuck, newBuck, k, k)
+		} else {
+			// Regular value
+			return newBuck.Put(k, v)
+		}
+	})
+	if err != nil {
+		return err
+	}
+
+	return oldParent.DeleteBucket(oldkey)
+}
+
+func (b *boltMailbox) Rename(newPath []string) error {
+	npath := strings.Join(newPath, "/")
+	opath := strings.Join(b.path, "/")
+
+	err := b.store.connection.Update(func(tx *bolt.Tx) error {
+		ownerBuck := tx.Bucket(usersBucket).Bucket([]byte(b.owner))
+		if ownerBuck == nil {
+			return fmt.Errorf("user not found: %s", b.owner)
+		}
+
+		c := ownerBuck.Cursor()
+		prefix := []byte(opath)
+
+		for k, v := c.Seek(prefix); bytes.HasPrefix(k, prefix); k, v = c.Next() {
+			if k == nil && v == nil {
+				break
+			}
+			if v == nil {
+				// It's a bucket
+				newKey := bytes.Replace(k, prefix, []byte(npath), 1) // just the 1st entry
+				err := moveBucket(ownerBuck, ownerBuck, k, newKey)
+				if err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
+	return err
+}
+
 func (b *boltMailbox) Flags() (imapsrv.MailboxFlag, error) {
 	if !b.flagsSet {
 		err := b.store.connection.View(func(tx *bolt.Tx) error {

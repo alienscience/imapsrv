@@ -29,6 +29,8 @@ type Mailstore interface {
 type Mailbox interface {
 	// Get the path of the mailbox
 	Path() []string
+	// Changes the path to this path
+	Rename(newPath []string) error
 	// Get the mailbox flags
 	Flags() (MailboxFlag, error)
 	// Get the uid validity value

@@ -60,6 +60,8 @@ func (p *parser) next() command {
 		return p.examine(tag)
 	case "create":
 		return p.create(tag)
+	case "rename":
+		return p.rename(tag)
 	case "list":
 		return p.list(tag)
 	case "fetch":
@@ -130,6 +132,16 @@ func (p *parser) create(tag string) command {
 	mailbox := p.expectString(p.lexer.astring)
 
 	return &create{tag: tag, mailbox: mailbox}
+}
+
+// rename creates a RENAME command
+func (p *parser) rename(tag string) command {
+	// Get the mailbox name
+	oldname := p.expectString(p.lexer.astring)
+	newname := p.expectString(p.lexer.astring)
+
+	return &rename{tag: tag, oldname: oldname, newname: newname}
+
 }
 
 // list creates a LIST command
