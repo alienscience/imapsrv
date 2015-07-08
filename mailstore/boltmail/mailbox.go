@@ -380,9 +380,7 @@ func (b *boltMailbox) getChildren() (boxes []imapsrv.Mailbox, err error) {
 				owner: b.owner,
 				path:  strings.Split(string(k), "/"),
 			})
-			fmt.Println("Adding", string(k), string(prefix))
 		}
-		fmt.Println("exit loop")
 		return nil
 	})
 	return

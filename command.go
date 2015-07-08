@@ -60,20 +60,25 @@ func (c *capability) execute(s *session, out chan response) {
 	defer close(out)
 	var commands []string
 
-	switch s.listener.encryption {
-	case unencryptedLevel:
+	if s.st == notAuthenticated {
+		switch s.listener.encryption {
+		case unencryptedLevel:
 		// TODO: do we want to support this?
 
-	case starttlsLevel:
-		if s.encryption == tlsLevel {
-			commands = append(commands, "AUTH=PLAIN")
-		} else {
-			commands = append(commands, "STARTTLS")
-			commands = append(commands, "LOGINDISABLED")
-		}
+		case starttlsLevel:
+			if s.encryption == tlsLevel {
+				commands = append(commands, "AUTH=PLAIN")
+			} else {
+				commands = append(commands, "STARTTLS")
+				commands = append(commands, "LOGINDISABLED")
+			}
 
-	case tlsLevel:
-		commands = append(commands, "AUTH=PLAIN")
+		case tlsLevel:
+			commands = append(commands, "AUTH=PLAIN")
+		}
+	} else {
+		// Things that are supported after authenticating
+		// commands = append(commands, "CHILDREN")
 	}
 
 	// Return all capabilities
