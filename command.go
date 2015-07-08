@@ -246,12 +246,6 @@ func (c *list) execute(sess *session, out chan response) {
 		return
 	}
 
-	// Check for an empty response
-	if len(mboxes) == 0 {
-		out <- no(c.tag, "LIST no results")
-		return
-	}
-
 	// Respond with the mailboxes
 	res := ok(c.tag, "LIST completed")
 	for _, mbox := range mboxes {
