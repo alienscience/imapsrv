@@ -218,8 +218,11 @@ func (c *list) execute(sess *session, out chan response) {
 	// Is the mailbox pattern empty? This indicates that we should return
 	// the delimiter and the root name of the reference
 	if c.mboxPattern == "" {
+		if len(c.reference) == 0 {
+			c.reference = "\"\""
+		}
 		res := ok(c.tag, "LIST completed")
-		res.putLine(fmt.Sprintf(`LIST () "%s" %s`, pathDelimiter, c.reference))
+		res.putLine(fmt.Sprintf(`LIST () "%s" %s`, string(pathDelimiter), c.reference))
 		out <- res
 		return
 	}
@@ -245,7 +248,7 @@ func (c *list) execute(sess *session, out chan response) {
 	// Respond with the mailboxes
 	res := ok(c.tag, "LIST completed")
 	for _, mbox := range mboxes {
-		res.putLine(fmt.Sprintf(`LIST (%s) "%s" /%s`,
+		res.putLine(fmt.Sprintf(`LIST (%s) "%s" "%s"`,
 			joinMailboxFlags(mbox),
 			string(pathDelimiter),
 			strings.Join(mbox.provider.Path(), string(pathDelimiter))))

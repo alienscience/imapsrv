@@ -374,13 +374,15 @@ func (b *boltMailbox) getChildren() (boxes []imapsrv.Mailbox, err error) {
 		}
 
 		prefix := []byte(strings.Join(b.path, "/"))
-		for k, _ := c.Seek(prefix); bytes.HasPrefix(k, prefix); k, _ = c.Next() {
+		fmt.Println("Prefix:", string(prefix))
+		for k, _ := c.Seek(prefix); len(k) > 0 && bytes.HasPrefix(k, prefix) && !bytes.Equal(k, prefix); k, _ = c.Next() {
 			boxes = append(boxes, &boltMailbox{
 				owner: b.owner,
 				path:  strings.Split(string(k), "/"),
 			})
+			fmt.Println("Adding", string(k), string(prefix))
 		}
-
+		fmt.Println("exit loop")
 		return nil
 	})
 	return
