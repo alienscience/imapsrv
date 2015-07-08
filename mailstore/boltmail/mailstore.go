@@ -78,6 +78,23 @@ func (b *BoltMailstore) Mailboxes(owner string, path []string) (boxes []imapsrv.
 	return box.getChildren()
 }
 
+func (b *BoltMailstore) NewMailbox(owner string, path []string) error {
+	return b.connection.Update(func(tx *bolt.Tx) error {
+		boltBox := &boltMailbox{
+			owner: owner,
+			path:  path,
+			store: b,
+		}
+		if e, err := boltBox.Exists(); err != nil {
+			return err
+		} else if e {
+			return imapsrv.CreateError{path}
+		}
+
+		return boltBox.createTransaction(tx)
+	})
+}
+
 func (b *BoltMailstore) NewMessage(rcpt string, input io.Reader) (imapsrv.Message, error) {
 	msg := &basicMessage{}
 	var err error

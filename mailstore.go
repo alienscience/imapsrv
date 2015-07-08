@@ -12,6 +12,8 @@ type Mailstore interface {
 	Mailbox(owner string, path []string) (Mailbox, error)
 	// Get a list of mailboxes at the given path
 	Mailboxes(owner string, path []string) ([]Mailbox, error)
+	// NewMailbox creates a new mailbox for the given user - error is nil if and only if this was successfull.
+	NewMailbox(owner string, path []string) error
 	// NewMessage adds the raw message information to the server, in the correct location
 	NewMessage(rcpt string, message io.Reader) (Message, error)
 	// NewUser adds the user to the server

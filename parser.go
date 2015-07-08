@@ -56,6 +56,8 @@ func (p *parser) next() command {
 		return p.selectCmd(tag)
 	case "examine":
 		return p.examine(tag)
+	case "create":
+		return p.create(tag)
 	case "list":
 		return p.list(tag)
 	case "fetch":
@@ -96,7 +98,7 @@ func (p *parser) logout(tag string) command {
 	return &logout{tag: tag}
 }
 
-// selectCmd creates a select command
+// selectCmd creates a SELECT command
 func (p *parser) selectCmd(tag string) command {
 	// Get the mailbox name
 	mailbox := p.expectString(p.lexer.astring)
@@ -104,12 +106,20 @@ func (p *parser) selectCmd(tag string) command {
 	return &selectMailbox{tag: tag, mailbox: mailbox}
 }
 
-// examine creates an examine command
+// examine creates an EXAMINE command
 func (p *parser) examine(tag string) command {
 	// Get the mailbox name
 	mailbox := p.expectString(p.lexer.astring)
 
 	return &examine{tag: tag, mailbox: mailbox}
+}
+
+// create creates an CREATE command
+func (p *parser) create(tag string) command {
+	// Get the mailbox name
+	mailbox := p.expectString(p.lexer.astring)
+
+	return &create{tag: tag, mailbox: mailbox}
 }
 
 // list creates a LIST command

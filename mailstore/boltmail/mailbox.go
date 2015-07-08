@@ -321,6 +321,17 @@ func (b *boltMailbox) storeTransaction(msg *basicMessage, tx *bolt.Tx) error {
 	return nil
 }
 
+func (b *boltMailbox) createTransaction(tx *bolt.Tx) error {
+	userBuck := tx.Bucket(usersBucket).Bucket([]byte(b.owner))
+	if userBuck == nil {
+		return fmt.Errorf("user bucket not found: %s", b.owner)
+	}
+
+	pathString := strings.Join(b.path, "/")
+	_, err := userBuck.CreateBucket([]byte(pathString))
+	return err
+}
+
 func (b *boltMailbox) getMailboxBucket(tx *bolt.Tx) (*bolt.Bucket, error) {
 	users := tx.Bucket(usersBucket)
 	bucket := users.Bucket([]byte(b.owner))
