@@ -169,7 +169,7 @@ func (c *selectMailbox) execute(sess *session, out chan response) {
 	defer close(out)
 
 	// Is the user authenticated?
-	if sess.st != authenticated {
+	if sess.st == notAuthenticated {
 		out <- mustAuthenticate(sess, c.tag, "SELECT")
 		return
 	}
@@ -185,6 +185,7 @@ func (c *selectMailbox) execute(sess *session, out chan response) {
 
 	if !exists {
 		out <- no(c.tag, "SELECT No such mailbox")
+		sess.st = authenticated
 		return
 	}
 
@@ -198,6 +199,7 @@ func (c *selectMailbox) execute(sess *session, out chan response) {
 		return
 	}
 
+	sess.st = selected
 	out <- res
 }
 
@@ -215,7 +217,7 @@ func (c *list) execute(sess *session, out chan response) {
 	defer close(out)
 
 	// Is the user authenticated?
-	if sess.st != authenticated {
+	if sess.st == notAuthenticated {
 		out <- mustAuthenticate(sess, c.tag, "LIST")
 		return
 	}
@@ -303,12 +305,12 @@ func (c *fetch) execute(sess *session, out chan response) {
 	defer close(out)
 
 	// Is the user authenticated?
-	if sess.st != authenticated {
+	if sess.st == notAuthenticated {
 		out <- mustAuthenticate(sess, c.tag, "FETCH")
 		return
 	}
 
-	if sess.mailbox == nil {
+	if sess.st != selected {
 		out <- bad(c.tag, "Must SELECT first") // TODO: is this the correct message?
 	}
 
@@ -345,6 +347,50 @@ func (c *fetch) execute(sess *session, out chan response) {
 	}
 
 	out <- ok(c.tag, "FETCH completed")
+}
+
+//------------------------------------------------------------------------------
+
+// examine gives information about a given mailbox
+type examine struct {
+	tag     string
+	mailbox string
+}
+
+func (c *examine) execute(sess *session, out chan response) {
+	defer close(out)
+
+	// Is the user authenticated?
+	if sess.st == notAuthenticated {
+		out <- mustAuthenticate(sess, c.tag, "EXAMINE")
+		return
+	}
+
+	// Select the mailbox
+	mbox := pathToSlice(c.mailbox)
+	exists, err := sess.selectMailbox(mbox)
+
+	if err != nil {
+		out <- internalError(sess, c.tag, "EXAMINE", err)
+		return
+	}
+
+	if !exists {
+		out <- no(c.tag, "EXAMINE No such mailbox")
+		sess.st = authenticated
+		return
+	}
+
+	res := ok(c.tag, "[READ-ONLY] EXAMINE completed")
+	err = sess.addMailboxInfo(res)
+
+	if err != nil {
+		out <- internalError(sess, c.tag, "SELECT", err)
+		return
+	}
+
+	sess.st = selected
+	out <- res
 }
 
 //------------------------------------------------------------------------------
