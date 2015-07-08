@@ -20,7 +20,7 @@ type boltMailbox struct {
 	owner  string
 
 	path     []string
-	flags    uint8
+	flags    imapsrv.MailboxFlag
 	flagsSet bool
 
 	/*
@@ -48,11 +48,11 @@ type boltMailbox struct {
 var (
 	mail_bucket     = []byte("mail")
 	firstUnseen_key = []byte("firstUnseen")
-	total_bucket    = []byte("total")
 	recent_key      = []byte("recent")
-	uid_bucket      = []byte("uid")
+	uid_key         = []byte("uid")
 
-	uid_key     = []byte("uid")
+	flags_key = []byte("flags")
+
 	counter_key = []byte("increment-counter")
 )
 
@@ -60,7 +60,7 @@ func (b *boltMailbox) Path() []string {
 	return b.path
 }
 
-func (b *boltMailbox) Flags() (uint8, error) {
+func (b *boltMailbox) Flags() (imapsrv.MailboxFlag, error) {
 	if !b.flagsSet {
 		// TODO: fetch flags
 	}
@@ -78,10 +78,10 @@ func (b *boltMailbox) UidValidity() (int32, error) {
 
 			// Get the UID bucket
 			var err error
-			uidBuck := owner.Bucket(uid_bucket)
+			uidBuck := owner.Bucket(uid_key)
 			if uidBuck == nil {
 				if tx.Writable() {
-					uidBuck, err = owner.CreateBucket(uid_bucket)
+					uidBuck, err = owner.CreateBucket(uid_key)
 					if err != nil {
 						return err
 					}
@@ -124,7 +124,7 @@ func (b *boltMailbox) UidValidity() (int32, error) {
 
 func (b *boltMailbox) NextUid() (uid int32, err error) {
 	err = b.store.connection.Update(func(tx *bolt.Tx) error {
-		mailbox, e := b.getMailboxBucket(tx)
+		mailbox, e := b.getMailboxBucketTx(tx)
 		if e != nil {
 			return e
 		}
@@ -149,7 +149,7 @@ func (b *boltMailbox) nextUidTransaction(mailbox *bolt.Bucket) (uid int32, err e
 
 func (b *boltMailbox) AllUids() (uids []int32, err error) {
 	err = b.store.connection.View(func(tx *bolt.Tx) error {
-		mailboxBucket, err := b.getMailboxBucket(tx)
+		mailboxBucket, err := b.getMailboxBucketTx(tx)
 		if err != nil {
 			return err
 		}
@@ -176,7 +176,7 @@ func (b *boltMailbox) AllUids() (uids []int32, err error) {
 // TODO: define "first": (longest ago, or most recent?)
 func (b *boltMailbox) FirstUnseen() (uid int32, err error) {
 	err = b.store.connection.View(func(tx *bolt.Tx) error {
-		mailboxBucket, err := b.getMailboxBucket(tx)
+		mailboxBucket, err := b.getMailboxBucketTx(tx)
 		if err != nil {
 			return err
 		}
@@ -200,7 +200,7 @@ func (b *boltMailbox) FirstUnseen() (uid int32, err error) {
 
 func (b *boltMailbox) TotalMessages() (total int32, err error) {
 	err = b.store.connection.View(func(tx *bolt.Tx) error {
-		mailboxBucket, err := b.getMailboxBucket(tx)
+		mailboxBucket, err := b.getMailboxBucketTx(tx)
 		if err != nil {
 			return err
 		}
@@ -216,7 +216,7 @@ func (b *boltMailbox) TotalMessages() (total int32, err error) {
 
 func (b *boltMailbox) RecentMessages() (total int32, err error) {
 	err = b.store.connection.View(func(tx *bolt.Tx) error {
-		mailboxBucket, err := b.getMailboxBucket(tx)
+		mailboxBucket, err := b.getMailboxBucketTx(tx)
 		if err != nil {
 			return err
 		}
@@ -267,12 +267,12 @@ func (b *boltMailbox) Fetch(uid int32) (imapsrv.Message, error) {
 }
 
 func (b *boltMailbox) storeTransaction(msg *basicMessage, tx *bolt.Tx) error {
-	mailbox, err := b.getMailboxBucket(tx)
+	mailbox, err := b.getMailboxBucketTx(tx)
 	if err != nil {
 		return err
 	}
 
-	uid, err := b.nextUidTransaction(mailbox)
+	b.uid, err = b.nextUidTransaction(mailbox)
 	if err != nil {
 		return err
 	}
@@ -287,7 +287,7 @@ func (b *boltMailbox) storeTransaction(msg *basicMessage, tx *bolt.Tx) error {
 		return err
 	}
 
-	err = mail.Put([]byte(strconv.Itoa(int(uid))), val)
+	err = mail.Put([]byte(strconv.Itoa(int(b.uid))), val)
 	if err != nil {
 		return err
 	}
@@ -321,7 +321,77 @@ func (b *boltMailbox) storeTransaction(msg *basicMessage, tx *bolt.Tx) error {
 	return nil
 }
 
-func (b *boltMailbox) getMailboxBucket(tx *bolt.Tx) (*bolt.Bucket, error) {
+func (b *boltMailbox) deleteTransaction(tx *bolt.Tx) error {
+	ownerBuck := tx.Bucket(usersBucket).Bucket([]byte(b.owner))
+	if ownerBuck == nil {
+		return fmt.Errorf("user %s does not exist", b.owner)
+	}
+	return ownerBuck.DeleteBucket([]byte(strings.Join(b.path, "/")))
+}
+
+func (b *boltMailbox) refreshTransaction(tx *bolt.Tx) error {
+	box, err := b.getMailboxBucketTx(tx)
+	if err != nil {
+		return err
+	}
+
+	flagsB := box.Get(flags_key)
+	if len(flagsB) > 0 {
+		num, err := strconv.Atoi(string(flagsB))
+		if err != nil {
+			return err
+		}
+		b.flags = imapsrv.MailboxFlag(num)
+	}
+	return nil
+}
+
+func (b *boltMailbox) saveMetaTx(tx *bolt.Tx) error {
+	box, err := b.getMailboxBucketTx(tx)
+	if err != nil {
+		return err
+	}
+
+	return box.Put(flags_key, []byte(strconv.Itoa(int(b.flags))))
+}
+
+func (b *boltMailbox) setAttributeTransaction(tx *bolt.Tx, attr imapsrv.MailboxFlag) error {
+	if !b.flagsSet {
+		var err error
+		b.flags, err = b.Flags()
+		if err != nil {
+			return err
+		}
+	}
+
+	if b.flags&imapsrv.Noselect == 0 {
+		b.flags ^= imapsrv.Noselect
+		return b.saveMetaTx(tx)
+	} else {
+		/* https://tools.ietf.org/html/rfc3501#section-6.3.4 >>
+		It is an error to attempt to
+		delete a name that has inferior hierarchical names and also has
+		the \Noselect mailbox name attribute (see the description of the
+		LIST response for more details).
+		*/
+		return imapsrv.DeleteError{b.path}
+	}
+}
+
+func (b *boltMailbox) deleteOrNoselectTransaction(tx *bolt.Tx) error {
+	children, err := b.getChildren()
+	if err != nil {
+		return err
+	}
+
+	if len(children) > 0 {
+		return b.setAttributeTransaction(tx, imapsrv.Noselect)
+	} else {
+		return b.deleteTransaction(tx)
+	}
+}
+
+func (b *boltMailbox) getMailboxBucketTx(tx *bolt.Tx) (*bolt.Bucket, error) {
 	users := tx.Bucket(usersBucket)
 	bucket := users.Bucket([]byte(b.owner))
 	if bucket == nil {
@@ -348,7 +418,7 @@ func (b *boltMailbox) getMailboxBucket(tx *bolt.Tx) (*bolt.Bucket, error) {
 }
 
 func (b *boltMailbox) getMailsBucket(tx *bolt.Tx) (*bolt.Bucket, error) {
-	mb, err := b.getMailboxBucket(tx)
+	mb, err := b.getMailboxBucketTx(tx)
 	if err != nil {
 		return nil, err
 	}
@@ -374,7 +444,6 @@ func (b *boltMailbox) getChildren() (boxes []imapsrv.Mailbox, err error) {
 		}
 
 		prefix := []byte(strings.Join(b.path, "/"))
-		fmt.Println("Prefix:", string(prefix))
 		for k, _ := c.Seek(prefix); len(k) > 0 && bytes.HasPrefix(k, prefix) && !bytes.Equal(k, prefix); k, _ = c.Next() {
 			boxes = append(boxes, &boltMailbox{
 				owner: b.owner,

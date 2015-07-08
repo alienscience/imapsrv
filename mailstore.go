@@ -12,6 +12,8 @@ type Mailstore interface {
 	Mailbox(owner string, path []string) (Mailbox, error)
 	// Get a list of mailboxes at the given path
 	Mailboxes(owner string, path []string) ([]Mailbox, error)
+	// DeleteMailbox removes the mailbox from the current user, or (if it has children), sets /Noselect flag
+	DeleteMailbox(owner string, path []string) error
 	// NewMessage adds the raw message information to the server, in the correct location
 	NewMessage(rcpt string, message io.Reader) (Message, error)
 	// NewUser adds the user to the server
@@ -26,7 +28,7 @@ type Mailbox interface {
 	// Get the path of the mailbox
 	Path() []string
 	// Get the mailbox flags
-	Flags() (uint8, error)
+	Flags() (MailboxFlag, error)
 	// Get the uid validity value
 	UidValidity() (int32, error)
 	// Get the next available uid in the mailbox
@@ -43,12 +45,14 @@ type Mailbox interface {
 	Fetch(uid int32) (Message, error)
 }
 
+type MailboxFlag uint8
+
 // Mailbox flags
 const (
 	// Noinferiors indicates it is not possible for any child levels of hierarchy to exist
 	// under this name; no child levels exist now and none can be
 	// created in the future.
-	Noinferiors = 1 << iota
+	Noinferiors MailboxFlag = 1 << iota
 
 	// Noselect indicates it is not possible to use this name as a selectable mailbox.
 	Noselect
@@ -63,7 +67,7 @@ const (
 	Unmarked
 )
 
-var mailboxFlags = map[uint8]string{
+var mailboxFlags = map[MailboxFlag]string{
 	Noinferiors: "Noinferiors",
 	Noselect:    "Noselect",
 	Marked:      "Marked",

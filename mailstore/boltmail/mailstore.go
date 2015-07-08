@@ -6,8 +6,6 @@ import (
 	"os"
 	"time"
 
-	"fmt"
-
 	"github.com/alienscience/imapsrv"
 	"github.com/boltdb/bolt"
 )
@@ -60,8 +58,8 @@ func (b *BoltMailstore) Mailbox(owner string, path []string) (box imapsrv.Mailbo
 			path:  path,
 			store: b,
 		}
-		if e, _ := boltBox.Exists(); !e {
-			return fmt.Errorf("mailbox not found: %v", path) // TODO: injection danger? / security
+		if e := boltBox.refreshTransaction(tx); e != nil {
+			return e
 		}
 		box = boltBox
 		return nil
@@ -76,6 +74,22 @@ func (b *BoltMailstore) Mailboxes(owner string, path []string) (boxes []imapsrv.
 		store: b,
 	}
 	return box.getChildren()
+}
+
+func (b *BoltMailstore) DeleteMailbox(owner string, path []string) error {
+	return b.connection.Update(func(tx *bolt.Tx) error {
+		box := &boltMailbox{
+			owner: owner,
+			path:  path,
+			store: b,
+		}
+		if e, err := box.Exists(); err != nil {
+			return err
+		} else if !e {
+			return imapsrv.DeleteError{path}
+		}
+		return box.deleteOrNoselectTransaction(tx)
+	})
 }
 
 func (b *BoltMailstore) NewMessage(rcpt string, input io.Reader) (imapsrv.Message, error) {
