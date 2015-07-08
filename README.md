@@ -61,9 +61,9 @@ To add a new IMAP command the usual steps are:
 
 ### Client Commands - Authenticated State
 - [x] SELECT command
-- [ ] EXAMINE command
-- [ ] CREATE command
-- [ ] DELETE command
+- [ ] EXAMINE command - testing required
+- [ ] CREATE command - in progress (not recursive yet)
+- [ ] DELETE command - testing required
 - [ ] RENAME command
 - [ ] SUBSCRIBE command
 - [ ] UNSUBSCRIBE command
