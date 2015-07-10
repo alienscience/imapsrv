@@ -33,6 +33,7 @@ func main() {
 	// Add a user
 	authStore.CreateUser("test@example.local", "password")
 	mailStore.NewUser("test@example.local")
+	mailStore.NewMailbox("test@example.local", []string{"INBOX"})
 
 	// Put everything together
 	s := imap.NewServer(
@@ -41,10 +42,8 @@ func main() {
 		// Mailstore
 		imap.StoreOption(mailStore),
 		// IMAP
-		imap.ListenOption("127.0.0.1:1193"),
 		imap.ListenSTARTTLSOoption("127.0.0.1:1194", "demo/certificates/public.pem", "demo/certificates/private.pem"),
 		// LMTP
-		imap.LMTPOptionSocket("/tmp/imapsrv-lmtp"),
 		imap.LMTPOptionTCP("localhost:61194"),
 	)
 

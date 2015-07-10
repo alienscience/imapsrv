@@ -95,9 +95,11 @@ type starttls struct {
 func (c *starttls) execute(sess *session, out chan response) {
 	defer close(out)
 
-	sess.conn.Write([]byte(fmt.Sprintf("%s Begin TLS negotiation now", c.tag)))
+	sess.conn.Write([]byte(fmt.Sprintf("%s OK Begin TLS negotiation now\r\n", c.tag)))
 
-	sess.conn = tls.Server(sess.conn, &tls.Config{Certificates: sess.listener.certificates})
+	tlsConn := tls.Server(sess.conn, &tls.Config{Certificates: sess.listener.certificates})
+
+	sess.conn = tlsConn
 	textConn := textproto.NewConn(sess.conn)
 
 	sess.encryption = tlsLevel

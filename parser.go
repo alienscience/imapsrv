@@ -3,6 +3,7 @@ package imapsrv
 import (
 	"bufio"
 	"fmt"
+	"log"
 	"strings"
 )
 
@@ -35,11 +36,14 @@ func (p *parser) next() command {
 
 	// Expect a tag followed by a command
 	tag := p.expectString(p.lexer.tag)
+
 	rawCommand := p.expectString(p.lexer.astring)
 
 	// Parse the command based on its lowercase value
 	// This makes typing over telnet easier
 	lcCommand := strings.ToLower(rawCommand)
+
+	log.Println("Processing", tag, lcCommand)
 
 	switch lcCommand {
 	case "noop":
