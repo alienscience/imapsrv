@@ -115,6 +115,23 @@ func joinMailboxFlags(m *mailboxWrap) string {
 
 	// Return a joined string
 	return strings.Join(ret, " ")
+
+}
+
+// joinMailboxFlags returns a string of mailbox flags for the given mailbox
+func joinMailboxFlag(f MailboxFlag) string {
+
+	// Convert the mailbox flags into a slice of strings
+	ret := make([]string, 0, 4)
+
+	for flag, str := range mailboxFlags {
+		if f&flag != 0 {
+			ret = append(ret, str)
+		}
+	}
+
+	// Return a joined string
+	return strings.Join(ret, " ")
 }
 
 // Expand a fetch macro into fetch attachments

@@ -50,25 +50,25 @@ To add a new IMAP command the usual steps are:
 ## Current state
 ### IMAP ([RFC 3501](https://tools.ietf.org/html/rfc3501))
 ### Client Commands - Any state
-- [ ] CAPABILITY command - in progress
+- [x] CAPABILITY command
 - [x] NOOP command
 - [x] LOGOUT command
 
 ### Client Commands - Not-Authenticated State
 - [x] STARTTLS command
-- [ ] AUTHENTICATE command
+- [x] AUTHENTICATE command
 - [x] LOGIN command
 
 ### Client Commands - Authenticated State
 - [x] SELECT command
-- [ ] EXAMINE command - testing required
+- [x] EXAMINE command
 - [ ] CREATE command - in progress (not recursive yet)
-- [ ] DELETE command - testing required
-- [ ] RENAME command
-- [ ] SUBSCRIBE command
-- [ ] UNSUBSCRIBE command
+- [x] DELETE command
+- [ ] RENAME command - in progress (special case INBOX missing)
+- [X] SUBSCRIBE command
+- [X] UNSUBSCRIBE command
 - [x] LIST command
-- [ ] LSUB command
+- [X] LSUB command
 - [ ] STATUS command
 - [ ] APPEND command
 

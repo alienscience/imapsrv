@@ -41,20 +41,30 @@ func (c *lsub) execute(sess *session, out chan response) {
 			log.Println("Error checking if subscribed", err)
 			continue
 		}
+
 		if sub {
+			// It is subscribed to, so return it
 			res.putLine(fmt.Sprintf(`LSUB (%s) "%s" "%s"`,
 				joinMailboxFlags(mbox),
 				string(pathDelimiter),
 				strings.Join(mbox.provider.Path(), string(pathDelimiter))))
 		} else {
+			// Perhaps a descendant is subscribed to, in case we should return it with \Noselect
 			des, err := mbox.provider.SubscribedDescendant()
 			if err != nil {
 				log.Println("Error while checking descendants:", err)
 				continue
 			}
 			if des {
+				// Yes, seems we should
+				flags, err := mbox.provider.Flags()
+				if err != nil {
+					log.Println("Error while checking flags:", err)
+					continue
+				}
+				flags |= Noselect
 				res.putLine(fmt.Sprintf(`LSUB (%s) "%s" "%s"`,
-					"\\Noselect",
+					joinMailboxFlag(flags),
 					string(pathDelimiter),
 					strings.Join(mbox.provider.Path(), string(pathDelimiter))))
 			}
