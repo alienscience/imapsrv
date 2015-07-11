@@ -23,6 +23,11 @@ func createLogin(p *parser, tag string) command {
 func (c *login) execute(sess *session, out chan response) {
 	defer close(out)
 
+	if sess.encryption == unencryptedLevel {
+		out <- no(c.tag, "LOGIN not supported over insecure connection")
+		return
+	}
+
 	// Has the user already logged in?
 	if sess.st != notAuthenticated {
 		message := "LOGIN already logged in"
@@ -46,4 +51,6 @@ func (c *login) execute(sess *session, out chan response) {
 
 func init() {
 	registerCommand("login", createLogin)
+
+	registerCapability("logindisabled", notAuthenticated, unencryptedLevel)
 }

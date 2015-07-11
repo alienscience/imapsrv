@@ -31,4 +31,8 @@ func (c *starttls) execute(sess *session, out chan response) {
 
 func init() {
 	registerCommand("starttls", createStarttls)
+
+	registerCapability("starttls", notAuthenticated, unencryptedLevel)
+	registerCapability("starttls", authenticated, unencryptedLevel)
+	registerCapability("starttls", selected, unencryptedLevel)
 }

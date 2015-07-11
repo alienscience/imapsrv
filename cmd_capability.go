@@ -15,34 +15,34 @@ func createCapability(p *parser, tag string) command {
 // execute a capability
 func (c *capability) execute(s *session, out chan response) {
 	defer close(out)
-	var commands []string
 
-	if s.st == notAuthenticated {
-		switch s.listener.encryption {
-		case unencryptedLevel:
-		// TODO: do we want to support this?
-
-		case starttlsLevel:
-			if s.encryption == tlsLevel {
-				// would be the case, if we actually supported it
-				// commands = append(commands, "AUTH=PLAIN")
-			} else {
-				commands = append(commands, "STARTTLS")
-				commands = append(commands, "LOGINDISABLED")
-			}
-
-		case tlsLevel:
-			// would be the case, if we actually supported it
-			// commands = append(commands, "AUTH=PLAIN")
-		}
-	} else {
-		// Things that are supported after authenticating
-		// commands = append(commands, "CHILDREN")
-	}
+	caps := capabilities[s.st][s.encryption]
 
 	// Return all capabilities
 	out <- ok(c.tag, "CAPABILITY completed").
-		putLine("CAPABILITY IMAP4rev1 " + strings.Join(commands, " "))
+		putLine("CAPABILITY IMAP4rev1 " + strings.Join(caps, " "))
+}
+
+var capabilities = [][][]string{
+	notAuthenticated: [][]string{
+		unencryptedLevel: []string{},
+		starttlsLevel:    []string{},
+		tlsLevel:         []string{},
+	},
+	authenticated: [][]string{
+		unencryptedLevel: []string{},
+		starttlsLevel:    []string{},
+		tlsLevel:         []string{},
+	},
+	selected: [][]string{
+		unencryptedLevel: []string{},
+		starttlsLevel:    []string{},
+		tlsLevel:         []string{},
+	},
+}
+
+func registerCapability(cap string, s state, e encryptionLevel) {
+	capabilities[s][e] = append(capabilities[s][e], strings.ToUpper(cap))
 }
 
 func init() {
