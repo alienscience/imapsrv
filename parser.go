@@ -5,12 +5,18 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"sync"
 )
 
 // parser can parse IMAP commands
 type parser struct {
 	lexer *lexer
 }
+
+var (
+	commands   = make(map[string]commandCreator)
+	commandsMu sync.RWMutex
+)
 
 // parseError is an Error from the IMAP parser or lexer
 type parseError string
@@ -23,7 +29,9 @@ func (e parseError) Error() string {
 // createParser creates a new IMAP parser, reading from the Reader
 func createParser(in *bufio.Reader) *parser {
 	lexer := createLexer(in)
-	return &parser{lexer: lexer}
+	return &parser{
+		lexer: lexer,
+	}
 }
 
 //----- Commands ---------------------------------------------------------------
@@ -35,9 +43,9 @@ func (p *parser) next() command {
 	p.lexer.newLine()
 
 	// Expect a tag followed by a command
-	tag := p.expectString(p.lexer.tag)
+	tag := p.ExpectString(p.lexer.tag)
 
-	rawCommand := p.expectString(p.lexer.astring)
+	rawCommand := p.ExpectString(p.lexer.astring)
 
 	// Parse the command based on its lowercase value
 	// This makes typing over telnet easier
@@ -45,150 +53,17 @@ func (p *parser) next() command {
 
 	log.Println("Processing", tag, lcCommand)
 
-	switch lcCommand {
-	case "noop":
-		return p.noop(tag)
-	case "capability":
-		return p.capability(tag)
-	case "starttls":
-		return p.starttls(tag)
-	case "login":
-		return p.login(tag)
-	case "logout":
-		return p.logout(tag)
-	case "select":
-		return p.selectCmd(tag)
-	case "delete":
-		return p.delete(tag)
-	case "examine":
-		return p.examine(tag)
-	case "create":
-		return p.create(tag)
-	case "rename":
-		return p.rename(tag)
-	case "list":
-		return p.list(tag)
-	case "fetch":
-		return p.fetch(tag)
-	default:
+	if creator, exists := commands[lcCommand]; exists {
+		return creator(p, tag)
+	} else {
 		return p.unknown(tag, rawCommand)
 	}
 }
 
-// noop creates a NOOP command
-func (p *parser) noop(tag string) command {
-	return &noop{tag: tag}
-}
-
-// capability creates a CAPABILITY command
-func (p *parser) capability(tag string) command {
-	return &capability{tag: tag}
-}
-
-// login creates a LOGIN command
-func (p *parser) login(tag string) command {
-
-	// Get the command arguments
-	userId := p.expectString(p.lexer.astring)
-	password := p.expectString(p.lexer.astring)
-
-	// Create the command
-	return &login{tag: tag, userId: userId, password: password}
-}
-
-// starttls creates a starttls command
-func (p *parser) starttls(tag string) command {
-	return &starttls{tag: tag}
-}
-
-// logout creates a LOGOUT command
-func (p *parser) logout(tag string) command {
-	return &logout{tag: tag}
-}
-
-// selectCmd creates a SELECT command
-func (p *parser) selectCmd(tag string) command {
-	// Get the mailbox name
-	mailbox := p.expectString(p.lexer.astring)
-
-	return &selectMailbox{tag: tag, mailbox: mailbox}
-}
-
-// delete creates a DELETE command
-func (p *parser) delete(tag string) command {
-	// Get the mailbox name
-	mailbox := p.expectString(p.lexer.astring)
-
-	return &delete{tag: tag, mailbox: mailbox}
-}
-
-// examine creates an EXAMINE command
-func (p *parser) examine(tag string) command {
-	// Get the mailbox name
-	mailbox := p.expectString(p.lexer.astring)
-
-	return &examine{tag: tag, mailbox: mailbox}
-}
-
-// create creates an CREATE command
-func (p *parser) create(tag string) command {
-	// Get the mailbox name
-	mailbox := p.expectString(p.lexer.astring)
-
-	return &create{tag: tag, mailbox: mailbox}
-}
-
-// rename creates a RENAME command
-func (p *parser) rename(tag string) command {
-	// Get the mailbox name
-	oldname := p.expectString(p.lexer.astring)
-	newname := p.expectString(p.lexer.astring)
-
-	return &rename{tag: tag, oldname: oldname, newname: newname}
-
-}
-
-// list creates a LIST command
-//    list            = "LIST" SP mailbox SP list-mailbox
-func (p *parser) list(tag string) command {
-
-	// Get the command arguments
-	reference := p.expectString(p.lexer.astring)
-
-	if strings.EqualFold(reference, "inbox") {
-		reference = "INBOX"
-	}
-	mailbox := p.expectString(p.lexer.listMailbox)
-
-	return &list{tag: tag, reference: reference, mboxPattern: mailbox}
-}
-
-// fetch creates a FETCH command
-//    fetch           = "FETCH" SP sequence-set SP ("ALL" / "FULL" / "FAST" /
-//                      fetch-att / "(" fetch-att *(SP fetch-att) ")")
-func (p *parser) fetch(tag string) command {
-
-	ret := createFetchCommand(tag)
-
-	// Get the command arguments
-	// The first argument is always a sequence set
-	p.lexer.skipSpace()
-	ret.sequenceSet = p.expectSequenceSet()
-
-	// The next token can be a fetch macro, a fetch attachment or an open bracket
-	ok, macro := p.lexer.fetchMacro()
-	if ok {
-		ret.macro = macro
-		return ret
-	} else {
-		p.lexer.pushBackToken()
-	}
-
-	isMultiple := p.lexer.leftParen()
-	ret.attachments = p.expectFetchAttachments(isMultiple)
-
-	return ret
-
+func registerCommand(cmd string, creator commandCreator) {
+	commandsMu.Lock()
+	defer commandsMu.Unlock()
+	commands[strings.ToLower(cmd)] = creator
 }
 
 // unknown creates a placeholder for an unknown command
@@ -200,7 +75,7 @@ func (p *parser) unknown(tag string, cmd string) command {
 
 // expectString gets a string token using the given lexer function
 // If the lexing fails, then this will panic
-func (p *parser) expectString(lex func() (bool, string)) string {
+func (p *parser) ExpectString(lex func() (bool, string)) string {
 	ok, ret := lex()
 	if !ok {
 		parserPanic("Parser unexpected %q", p.lexer.current())
