@@ -9,7 +9,7 @@ type examine struct {
 // createExamine creates an EXAMINE command
 func createExamine(p *parser, tag string) command {
 	// Get the mailbox name
-	mailbox := p.ExpectString(p.lexer.astring)
+	mailbox := p.expectString(p.lexer.astring)
 
 	return &examine{tag: tag, mailbox: mailbox}
 }

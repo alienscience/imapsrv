@@ -15,8 +15,8 @@ type rename struct {
 // createRename creates a RENAME command
 func createRename(p *parser, tag string) command {
 	// Get the mailbox name
-	oldname := p.ExpectString(p.lexer.astring)
-	newname := p.ExpectString(p.lexer.astring)
+	oldname := p.expectString(p.lexer.astring)
+	newname := p.expectString(p.lexer.astring)
 
 	return &rename{tag: tag, oldname: oldname, newname: newname}
 

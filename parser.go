@@ -43,9 +43,9 @@ func (p *parser) next() command {
 	p.lexer.newLine()
 
 	// Expect a tag followed by a command
-	tag := p.ExpectString(p.lexer.tag)
+	tag := p.expectString(p.lexer.tag)
 
-	rawCommand := p.ExpectString(p.lexer.astring)
+	rawCommand := p.expectString(p.lexer.astring)
 
 	// Parse the command based on its lowercase value
 	// This makes typing over telnet easier
@@ -75,7 +75,7 @@ func (p *parser) unknown(tag string, cmd string) command {
 
 // expectString gets a string token using the given lexer function
 // If the lexing fails, then this will panic
-func (p *parser) ExpectString(lex func() (bool, string)) string {
+func (p *parser) expectString(lex func() (bool, string)) string {
 	ok, ret := lex()
 	if !ok {
 		parserPanic("Parser unexpected %q", p.lexer.current())

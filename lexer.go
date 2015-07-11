@@ -91,6 +91,14 @@ func createLexer(in *bufio.Reader) *lexer {
 
 //-------- IMAP tokens ---------------------------------------------------------
 
+func (l *lexer) rawLine() (bool, string) {
+	l.startToken()
+	for b := l.consume(); b != lf; b = l.consume() {
+
+	}
+	return true, string(l.line)
+}
+
 // astring treats the input as a string
 func (l *lexer) astring() (bool, string) {
 	l.skipSpace()

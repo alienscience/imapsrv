@@ -14,7 +14,7 @@ type create struct {
 // createCreate creates an CREATE command
 func createCreate(p *parser, tag string) command {
 	// Get the mailbox name
-	mailbox := p.ExpectString(p.lexer.astring)
+	mailbox := p.expectString(p.lexer.astring)
 
 	return &create{tag: tag, mailbox: mailbox}
 }

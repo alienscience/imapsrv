@@ -12,8 +12,8 @@ type login struct {
 // createLogin creates a LOGIN command
 func createLogin(p *parser, tag string) command {
 	// Get the command arguments
-	userId := p.ExpectString(p.lexer.astring)
-	password := p.ExpectString(p.lexer.astring)
+	userId := p.expectString(p.lexer.astring)
+	password := p.expectString(p.lexer.astring)
 
 	// Create the command
 	return &login{tag: tag, userId: userId, password: password}

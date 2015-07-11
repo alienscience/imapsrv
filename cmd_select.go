@@ -9,7 +9,7 @@ type selectMailbox struct {
 // createSelect creates a SELECT command
 func createSelect(p *parser, tag string) command {
 	// Get the mailbox name
-	mailbox := p.ExpectString(p.lexer.astring)
+	mailbox := p.expectString(p.lexer.astring)
 
 	return &selectMailbox{tag: tag, mailbox: mailbox}
 }

@@ -24,14 +24,16 @@ func (c *capability) execute(s *session, out chan response) {
 
 		case starttlsLevel:
 			if s.encryption == tlsLevel {
-				commands = append(commands, "AUTH=PLAIN")
+				// would be the case, if we actually supported it
+				// commands = append(commands, "AUTH=PLAIN")
 			} else {
 				commands = append(commands, "STARTTLS")
 				commands = append(commands, "LOGINDISABLED")
 			}
 
 		case tlsLevel:
-			commands = append(commands, "AUTH=PLAIN")
+			// would be the case, if we actually supported it
+			// commands = append(commands, "AUTH=PLAIN")
 		}
 	} else {
 		// Things that are supported after authenticating

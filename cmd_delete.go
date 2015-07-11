@@ -14,7 +14,7 @@ type delete struct {
 // createDelete creates a DELETE command
 func createDelete(p *parser, tag string) command {
 	// Get the mailbox name
-	mailbox := p.ExpectString(p.lexer.astring)
+	mailbox := p.expectString(p.lexer.astring)
 
 	return &delete{tag: tag, mailbox: mailbox}
 }

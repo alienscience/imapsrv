@@ -17,12 +17,12 @@ type list struct {
 func createList(p *parser, tag string) command {
 
 	// Get the command arguments
-	reference := p.ExpectString(p.lexer.astring)
+	reference := p.expectString(p.lexer.astring)
 
 	if strings.EqualFold(reference, "inbox") {
 		reference = "INBOX"
 	}
-	mailbox := p.ExpectString(p.lexer.listMailbox)
+	mailbox := p.expectString(p.lexer.listMailbox)
 
 	return &list{tag: tag, reference: reference, mboxPattern: mailbox}
 }
