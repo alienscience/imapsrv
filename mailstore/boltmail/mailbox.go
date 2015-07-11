@@ -547,3 +547,7 @@ func (b *boltMailbox) Exists() (exists bool, err error) {
 	})
 	return
 }
+
+func (b *boltMailbox) Checkpoint() {
+
+}

@@ -20,8 +20,6 @@ type encryptionLevel int
 const (
 	// unencryptedLevel indicates an unencrypted / cleartext connection
 	unencryptedLevel encryptionLevel = iota
-	// starttlsLevel indicates that an unencrypted connection can be used to start a TLS connection
-	starttlsLevel
 	// tlsLevel indicates that a secure TLS connection must be set first
 	tlsLevel
 )

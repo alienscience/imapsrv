@@ -26,17 +26,14 @@ func (c *capability) execute(s *session, out chan response) {
 var capabilities = [][][]string{
 	notAuthenticated: [][]string{
 		unencryptedLevel: []string{},
-		starttlsLevel:    []string{},
 		tlsLevel:         []string{},
 	},
 	authenticated: [][]string{
 		unencryptedLevel: []string{},
-		starttlsLevel:    []string{},
 		tlsLevel:         []string{},
 	},
 	selected: [][]string{
 		unencryptedLevel: []string{},
-		starttlsLevel:    []string{},
 		tlsLevel:         []string{},
 	},
 }

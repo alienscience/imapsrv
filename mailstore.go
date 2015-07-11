@@ -47,6 +47,9 @@ type Mailbox interface {
 	RecentMessages() (int32, error)
 	// Fetch the message with the given UID
 	Fetch(uid int32) (Message, error)
+	// Checkpoint allows the Mailbox to do some optional housekeeping,
+	// e.g., resolving the server's in-memory state of the mailbox with the state on its disk
+	Checkpoint()
 }
 
 type MailboxFlag uint8

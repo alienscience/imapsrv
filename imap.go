@@ -125,7 +125,7 @@ func ListenSTARTTLSOoption(Addr, certFile, keyFile string) option {
 		// Set up the listener
 		l := listener{
 			addr:         Addr,
-			encryption:   starttlsLevel,
+			encryption:   unencryptedLevel,
 			certificates: certs,
 		}
 		s.config.Listeners = append(s.config.Listeners, l)
