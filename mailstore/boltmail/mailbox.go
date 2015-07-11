@@ -17,9 +17,10 @@ type boltMailbox struct {
 	store  *BoltMailstore
 	owner  string
 
-	path     []string
-	flags    imapsrv.MailboxFlag
-	flagsSet bool
+	path       []string
+	flags      imapsrv.MailboxFlag
+	subscribed bool
+	metaSet    bool
 
 	/*
 		// Get the path of the mailbox
@@ -48,10 +49,9 @@ var (
 	firstUnseen_key = []byte("firstUnseen")
 	recent_key      = []byte("recent")
 	uid_key         = []byte("uid")
-
-	flags_key = []byte("flags")
-
-	counter_key = []byte("increment-counter")
+	sub_key         = []byte("subscriptions")
+	flags_key       = []byte("flags")
+	counter_key     = []byte("increment-counter")
 )
 
 func (b *boltMailbox) Path() []string {
@@ -115,7 +115,7 @@ func (b *boltMailbox) Rename(newPath []string) error {
 }
 
 func (b *boltMailbox) Flags() (imapsrv.MailboxFlag, error) {
-	if !b.flagsSet {
+	if !b.metaSet {
 		err := b.store.connection.View(func(tx *bolt.Tx) error {
 			return b.refreshTransaction(tx)
 		})
@@ -402,6 +402,8 @@ func (b *boltMailbox) refreshTransaction(tx *bolt.Tx) error {
 		}
 		b.flags = imapsrv.MailboxFlag(num)
 	}
+	subB := box.Get(sub_key)
+	b.subscribed = len(subB) > 0
 	return nil
 }
 
@@ -411,11 +413,21 @@ func (b *boltMailbox) saveMetaTx(tx *bolt.Tx) error {
 		return err
 	}
 
-	return box.Put(flags_key, []byte(strconv.Itoa(int(b.flags))))
+	err = box.Put(flags_key, []byte(strconv.Itoa(int(b.flags))))
+	if err != nil {
+		return err
+	}
+
+	sub_val := []byte{}
+	if b.subscribed {
+		sub_val = []byte{1}
+	}
+	return box.Put(sub_key, sub_val)
+
 }
 
 func (b *boltMailbox) setAttributeTransaction(tx *bolt.Tx, attr imapsrv.MailboxFlag) error {
-	if !b.flagsSet {
+	if !b.metaSet {
 		var err error
 		b.flags, err = b.Flags()
 		if err != nil {
@@ -550,4 +562,84 @@ func (b *boltMailbox) Exists() (exists bool, err error) {
 
 func (b *boltMailbox) Checkpoint() {
 
+}
+
+func (b *boltMailbox) Subscribe() error {
+	return b.store.connection.Update(func(tx *bolt.Tx) error {
+		owner := tx.Bucket(usersBucket).Bucket([]byte(b.owner))
+		if owner == nil {
+			return fmt.Errorf("user not found: %s", owner)
+		}
+		subs, err := owner.CreateBucketIfNotExists(sub_key)
+		if err != nil {
+			return err
+		}
+		err = subs.Put([]byte(strings.Join(b.path, "/")), []byte{1})
+		if err != nil {
+			return err
+		}
+
+		b.subscribed = true
+		return b.saveMetaTx(tx)
+	})
+}
+
+func (b *boltMailbox) Unsubscribe() error {
+	return b.store.connection.Update(func(tx *bolt.Tx) error {
+		owner := tx.Bucket(usersBucket).Bucket([]byte(b.owner))
+		if owner == nil {
+			return fmt.Errorf("user not found: %s", owner)
+		}
+		subs, err := owner.CreateBucketIfNotExists(sub_key)
+		if err != nil {
+			return err
+		}
+		err = subs.Delete([]byte(strings.Join(b.path, "/")))
+		if err != nil {
+			return err
+		}
+
+		b.subscribed = false
+		return b.saveMetaTx(tx)
+	})
+}
+
+func (b *boltMailbox) Subscribed() (bool, error) {
+	if !b.metaSet {
+		err := b.store.connection.View(func(tx *bolt.Tx) error {
+			return b.refreshTransaction(tx)
+		})
+		if err != nil {
+			return false, err
+		}
+		b.metaSet = true
+	}
+	return b.subscribed, nil
+}
+
+func (b *boltMailbox) SubscribedDescendant() (bool, error) {
+	sub := false
+	err := b.store.connection.View(func(tx *bolt.Tx) error {
+		owner := tx.Bucket(usersBucket).Bucket([]byte(b.owner))
+		if owner == nil {
+			return fmt.Errorf("user not found: %s", b.owner)
+		}
+
+		subs := owner.Bucket(sub_key)
+		if subs == nil {
+			return nil
+		}
+
+		c := subs.Cursor()
+
+		search := []byte(strings.Join(b.path, "/") + "/")
+		for k, _ := c.Seek(search); k != nil; k, _ = c.Next() {
+			if bytes.HasPrefix(k, search) && !bytes.Equal(search, k) {
+				sub = true
+			}
+		}
+
+		return nil
+	})
+	return sub, err
 }

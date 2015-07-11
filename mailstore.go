@@ -20,8 +20,6 @@ type Mailstore interface {
 	NewMessage(rcpt string, message io.Reader) (Message, error)
 	// NewUser adds the user to the server
 	NewUser(email string) error
-	// Addresses returns a list of all available recipients
-	Addresses() ([]string, error)
 }
 
 // An IMAP mailbox
@@ -50,6 +48,15 @@ type Mailbox interface {
 	// Checkpoint allows the Mailbox to do some optional housekeeping,
 	// e.g., resolving the server's in-memory state of the mailbox with the state on its disk
 	Checkpoint()
+	// Subscribe adds this current mailbox to the list of subscribed mailboxes
+	Subscribe() error
+	// Unsubscribe removes this current mailbox from the list of subscribed mailboxes
+	Unsubscribe() error
+	// Subscribed returns true if and only if it is in the list of subscribed mailboxes
+	Subscribed() (bool, error)
+	// SubscribedDescendant returns true if and only if the list of subscribed mailboxes contains
+	// any of the descendants of this mailbox (recursively)
+	SubscribedDescendant() (bool, error)
 }
 
 type MailboxFlag uint8

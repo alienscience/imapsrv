@@ -34,6 +34,7 @@ func main() {
 	authStore.CreateUser("test@example.local", "password")
 	mailStore.NewUser("test@example.local")
 	mailStore.NewMailbox("test@example.local", []string{"INBOX"})
+	mailStore.NewMailbox("test@example.local", []string{"Trash"})
 
 	// Put everything together
 	s := imap.NewServer(

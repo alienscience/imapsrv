@@ -13,6 +13,7 @@ func createNoop(p *parser, tag string) command {
 // Execute a noop
 func (c *noop) execute(s *session, out chan response) {
 	defer close(out)
+	// TODO: send recent updates as untagged response
 	out <- ok(c.tag, "NOOP Completed")
 }
 
