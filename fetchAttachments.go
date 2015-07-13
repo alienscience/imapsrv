@@ -7,6 +7,7 @@ import (
 	"github.com/jhillyerd/go.enmime"
 	"io"
 	"mime"
+	"strconv"
 	"strings"
 )
 
@@ -42,6 +43,66 @@ const (
 type fetchPartial struct {
 	fromOctet uint32
 	length    uint32
+}
+
+//---- fetchSection ------------------------------------------------------------
+
+// The text description of a section specification
+func (s *fetchSection) spec() string {
+
+	ret := ""
+
+	// Section identifier
+	i := 0
+	for ; i < len(s.section); i += 1 {
+		if i > 0 {
+			ret += "."
+		}
+		ret += strconv.FormatUint(uint64(s.section[i]), 10)
+	}
+
+	// Are there part specifiers?
+	if s.part == noPartSpecifier {
+		return ret
+	}
+	
+	// Add the part specifier
+	if i > 0 {
+		ret += "."
+	}
+	
+	switch s.part {
+	case headerPart:
+		ret += "HEADER"
+	case headerFieldsPart:
+		ret += "HEADER.FIELDS "
+		ret += s.fieldsSpec()
+	case headerFieldsNotPart:
+		ret += "HEADER.FIELDS.NOT "
+		ret += s.fieldsSpec()
+	case textPart:
+		ret += "TEXT"
+	case mimePart:
+		ret += "MIME"
+	default:
+		// Add nothing
+	}
+
+	return ret
+}
+
+// Section specifier header fields as a string
+func (s *fetchSection) fieldsSpec() string {
+
+	ret := "("
+	for i := 0; i < len(s.fields); i += 1 {
+		if i > 0 {
+			ret += " "
+		}
+		ret += s.fields[i]
+	}
+	ret += ")"
+	return ret
 }
 
 //---- ENVELOPE ----------------------------------------------------------------
@@ -232,11 +293,12 @@ func (a *bodySectionFetchAtt) extract(resp response, msg *messageWrap) error {
 	case textPart:
 		payload = string(currentSection.Content())
 	case mimePart:
-		payload = extractMimeImb(currentSection)
+		// TODO: check if MIME-IMB and MIME-IMT headers are the same
+		payload = extractHeader(currentSection)
 	}
 
 	// Add the section information to the field name
-	sectionSpec := fs.sectionSpec()
+	sectionSpec := fs.spec()
 	fieldName := fmt.Sprint("BODY", sectionSpec)
 	resp.putField(fieldName, payload)
 
@@ -256,6 +318,62 @@ func extractPartial(section enmime.MIMEPart, partial *fetchPartial) string {
 	highIndex := partial.fromOctet + partial.length
 	partialContent := content[partial.fromOctet:highIndex]
 	return string(partialContent)
+}
+
+func extractHeader(section enmime.MIMEPart) string {
+
+	headerMap := section.Header()
+
+	// Rebuild the header string from the parsed datastructure
+	ret := ""
+	for header, vList := range headerMap {
+		for _, value := range vList {
+			ret += header + ": " + value
+		}
+	}
+
+	return ret
+}
+
+func extractHeaderFields(section enmime.MIMEPart, fields []string) string {
+
+	headerMap := section.Header()
+
+	// Partially rebuild the header string from the parsed
+	// datastructure using the given fields
+	ret := ""
+	for _, header := range fields {
+		vList := headerMap[header]
+		for _, value := range vList {
+			ret += header + ": " + value
+		}
+	}
+
+	return ret
+}
+
+func extractHeaderNotFields(section enmime.MIMEPart, fields []string) string {
+
+	headerMap := section.Header()
+
+	// Build a set of fields to exclude
+	excludeField := make(map[string]bool)
+	for _, field := range fields {
+		excludeField[field] = true
+	}
+
+	// Partially rebuild the header string from the parsed
+	// datastructure excluding the given fields
+	ret := ""
+	for header, vList := range headerMap {
+		if !excludeField[header] {
+			for _, value := range vList {
+				ret += header + ": " + value
+			}
+		}
+	}
+
+	return ret
 }
 
 //---- BODYSTRUCTURE -----------------------------------------------------------
