@@ -51,5 +51,5 @@ func (c *status) execute(sess *session, out chan response) {
 }
 
 func init() {
-	registerCommand("status", createExamine)
+	registerCommand("status", createStatus)
 }

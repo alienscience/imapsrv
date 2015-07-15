@@ -96,6 +96,7 @@ func (l *lexer) rawLine() (bool, string) {
 	for b := l.consume(); b != lf; b = l.consume() {
 
 	}
+	l.pushBack()
 	return true, string(l.line)
 }
 
@@ -124,6 +125,7 @@ func (l *lexer) listMailbox() (bool, string) {
 }
 
 // An unsigned integer (imap type number)
+// TODO: difference with nonZeroInteger()?
 func (l *lexer) integer() (bool, uint32) {
 	l.startToken()
 

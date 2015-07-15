@@ -51,8 +51,10 @@ func (p *parser) next() command {
 	// This makes typing over telnet easier
 	lcCommand := strings.ToLower(rawCommand)
 
-	log.Println("Processing", tag, lcCommand)
-
+	defer func() {
+		log.Println("Processing:", p.expectString(p.lexer.rawLine))
+	}()
+	
 	if creator, exists := commands[lcCommand]; exists {
 		return creator(p, tag)
 	} else {

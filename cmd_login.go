@@ -16,7 +16,7 @@ func createLogin(p *parser, tag string) command {
 	password := p.expectString(p.lexer.astring)
 
 	// Create the command
-	return &login{tag: tag, userId: userId, password: password}
+	return &login{tag, userId, password}
 }
 
 // Login command
