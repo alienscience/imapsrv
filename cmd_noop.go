@@ -11,10 +11,20 @@ func createNoop(p *parser, tag string) command {
 }
 
 // Execute a noop
-func (c *noop) execute(s *session, out chan response) {
+func (c *noop) execute(sess *session, out chan response) {
 	defer close(out)
-	// TODO: send recent updates as untagged response
-	out <- ok(c.tag, "NOOP Completed")
+
+	res := ok(c.tag, "NOOP Completed")
+
+	if sess.st == selected {
+		// TODO: send recent updates as untagged response
+		err := sess.addMailboxInfo(res)
+		if err != nil {
+			out <- no(c.tag, "NOOP failed")
+		}
+	}
+
+	out <- res
 }
 
 func init() {

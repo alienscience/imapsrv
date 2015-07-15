@@ -20,7 +20,7 @@ func (c *status) execute(sess *session, out chan response) {
 
 	// Is the user authenticated?
 	if sess.st == notAuthenticated {
-		out <- mustAuthenticate(sess, c.tag, "EXAMINE")
+		out <- mustAuthenticate(sess, c.tag, "STATUS")
 		return
 	}
 
@@ -29,17 +29,17 @@ func (c *status) execute(sess *session, out chan response) {
 	exists, err := sess.selectMailbox(mbox)
 
 	if err != nil {
-		out <- internalError(sess, c.tag, "EXAMINE", err)
+		out <- internalError(sess, c.tag, "STATUS", err)
 		return
 	}
 
 	if !exists {
-		out <- no(c.tag, "EXAMINE No such mailbox")
+		out <- no(c.tag, "STATUS No such mailbox")
 		sess.st = authenticated
 		return
 	}
 
-	res := ok(c.tag, "[READ-ONLY] EXAMINE completed")
+	res := ok(c.tag, "STATUS completed")
 	err = sess.addMailboxInfo(res)
 
 	if err != nil {
@@ -51,5 +51,5 @@ func (c *status) execute(sess *session, out chan response) {
 }
 
 func init() {
-	registerCommand("examine", createExamine)
+	registerCommand("status", createExamine)
 }

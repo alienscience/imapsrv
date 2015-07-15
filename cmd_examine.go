@@ -1,6 +1,6 @@
 package imapsrv
 
-// examine gives information about a given mailbox
+// examine gives information about a given mailbox, and selects it read-only
 type examine struct {
 	tag     string
 	mailbox string
